@@ -1,0 +1,119 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-grade-hard: var(--grade-hard);
+  --color-grade-struggled: var(--grade-struggled);
+  --color-grade-good: var(--grade-good);
+  --color-grade-easy: var(--grade-easy);
+}
+
+:root {
+  --radius: 0.75rem;
+  /* Deep navy with purple accents */
+  --background: oklch(0.16 0.04 270);
+  --foreground: oklch(0.97 0.01 260);
+  --card: oklch(0.21 0.045 270);
+  --card-foreground: oklch(0.97 0.01 260);
+  --popover: oklch(0.21 0.045 270);
+  --popover-foreground: oklch(0.97 0.01 260);
+  --primary: oklch(0.62 0.22 285);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.27 0.04 270);
+  --secondary-foreground: oklch(0.97 0.01 260);
+  --muted: oklch(0.25 0.035 270);
+  --muted-foreground: oklch(0.68 0.03 265);
+  --accent: oklch(0.55 0.2 285);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.3 0.04 270);
+  --input: oklch(0.25 0.035 270);
+  --ring: oklch(0.62 0.22 285);
+
+  --grade-hard: oklch(0.55 0.2 25);
+  --grade-struggled: oklch(0.6 0.18 55);
+  --grade-good: oklch(0.55 0.16 150);
+  --grade-easy: oklch(0.55 0.2 270);
+}
+
+.dark {
+  --background: oklch(0.16 0.04 270);
+  --foreground: oklch(0.97 0.01 260);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}
+
+/* Tag Chip Styles */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  border: 0;
+  font: 700 9px sans-serif;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  color: #fff;
+  background: #8a8271;
+  opacity: 0.75;
+  user-select: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease;
+}
+.tag:hover {
+  opacity: 1;
+}
+.tag:active {
+  transform: scale(0.95);
+}
+.tag.note {
+  background: #8a8271;
+}
+.tag.question {
+  background: #3d4c6b;
+}
+.tag.factcheck {
+  background: #7a8f4a;
+}
