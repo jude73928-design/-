@@ -12,15 +12,17 @@ import {
   Copy,
   Check,
   X,
-  FileText,
   Loader2,
   ArrowLeftRight,
   PenTool,
   StickyNote,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { loadDeck } from "@/lib/flashcards";
 import { WriteRepeatModal } from "@/components/WriteRepeatModal";
 import { playCorrect } from "@/lib/sounds";
+import { cn } from "@/lib/utils";
 
 export function HighlightTranslateTooltip() {
   const [selectedText, setSelectedText] = useState("");
@@ -46,6 +48,11 @@ export function HighlightTranslateTooltip() {
     return true;
   });
 
+  // Token Context State for word range extension
+  const [tokens, setTokens] = useState<string[]>([]);
+  const [startIdx, setStartIdx] = useState<number>(0);
+  const [endIdx, setEndIdx] = useState<number>(0);
+
   // Writing practice modal state
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
 
@@ -69,6 +76,9 @@ export function HighlightTranslateTooltip() {
     audioHandleRef.current?.stop();
     audioHandleRef.current = null;
     setSelectedText("");
+    setTokens([]);
+    setStartIdx(0);
+    setEndIdx(0);
     setPosition(null);
     setTranslation(null);
     setIsLoading(false);
@@ -187,75 +197,206 @@ export function HighlightTranslateTooltip() {
     }
   };
 
-  // Text selection listener
+  // Word Selection & Extension Handlers
+  const handleExtendLeft = () => {
+    if (startIdx > 0 && tokens.length) {
+      const nextStart = startIdx - 1;
+      setStartIdx(nextStart);
+      const newText = tokens.slice(nextStart, endIdx + 1).join(" ");
+      setSelectedText(newText);
+      runTranslation(newText, forcedTarget || undefined);
+      if (autoRepeatOnMobile) {
+        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
+      }
+    }
+  };
+
+  const handleExtendRight = () => {
+    if (endIdx < tokens.length - 1 && tokens.length) {
+      const nextEnd = endIdx + 1;
+      setEndIdx(nextEnd);
+      const newText = tokens.slice(startIdx, nextEnd + 1).join(" ");
+      setSelectedText(newText);
+      runTranslation(newText, forcedTarget || undefined);
+      if (autoRepeatOnMobile) {
+        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
+      }
+    }
+  };
+
+  const handleSelectWordOnly = () => {
+    if (tokens.length) {
+      setEndIdx(startIdx);
+      const newText = tokens[startIdx] || selectedText;
+      setSelectedText(newText);
+      runTranslation(newText, forcedTarget || undefined);
+      if (autoRepeatOnMobile) {
+        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
+      }
+    }
+  };
+
+  const handleSelectFullSentence = () => {
+    if (tokens.length) {
+      setStartIdx(0);
+      setEndIdx(tokens.length - 1);
+      const newText = tokens.join(" ");
+      setSelectedText(newText);
+      runTranslation(newText, forcedTarget || undefined);
+      if (autoRepeatOnMobile) {
+        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
+      }
+    }
+  };
+
+  const handleTokenClick = (idx: number) => {
+    if (!tokens.length) return;
+    let nextStart = startIdx;
+    let nextEnd = endIdx;
+
+    if (idx < startIdx) {
+      nextStart = idx;
+    } else if (idx > endIdx) {
+      nextEnd = idx;
+    } else {
+      nextStart = idx;
+      nextEnd = idx;
+    }
+
+    setStartIdx(nextStart);
+    setEndIdx(nextEnd);
+    const newText = tokens.slice(nextStart, nextEnd + 1).join(" ");
+    setSelectedText(newText);
+    runTranslation(newText, forcedTarget || undefined);
+    if (autoRepeatOnMobile) {
+      void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
+    }
+  };
+
+  // Text Selection & Tap Listener
   useEffect(() => {
     let timeoutId: number;
 
-    const handleSelectionChange = () => {
+    const processSelectionOrPoint = () => {
       window.clearTimeout(timeoutId);
       timeoutId = window.setTimeout(() => {
         const selection = window.getSelection();
-        if (!selection || selection.isCollapsed) {
+        if (!selection) return;
+
+        let rawText = "";
+        let range: Range | null = null;
+
+        if (!selection.isCollapsed && selection.rangeCount > 0) {
+          rawText = selection.toString().trim();
+          range = selection.getRangeAt(0);
+        } else if (selection.isCollapsed) {
+          // Attempt word expansion on single click/tap
+          try {
+            const sel = window.getSelection();
+            if (sel && sel.focusNode) {
+              const nodeText = sel.focusNode.textContent || "";
+              if (nodeText.trim().length > 0) {
+                // Expand selection to word boundaries
+                sel.modify("move", "backward", "word");
+                sel.modify("extend", "forward", "word");
+                rawText = sel.toString().trim();
+                if (sel.rangeCount > 0) {
+                  range = sel.getRangeAt(0);
+                }
+              }
+            }
+          } catch {
+            // Modify method supported in browser
+          }
+        }
+
+        if (!rawText || rawText.length < 1) {
           return;
         }
 
-        const text = selection.toString().trim();
-        // Ignore single character or empty
-        if (!text || text.length < 2) {
-          return;
-        }
-
-        // Avoid triggering if selection is inside our tooltip or modals
+        // Ignore if click was inside tooltip or modal
         if (
           tooltipRef.current &&
-          (tooltipRef.current.contains(selection.anchorNode) ||
-            tooltipRef.current.contains(selection.focusNode))
+          range &&
+          (tooltipRef.current.contains(range.startContainer) ||
+            tooltipRef.current.contains(range.endContainer))
         ) {
           return;
         }
 
-        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
         if (!range) return;
-
         const rect = range.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
 
-        // Position tooltip centered horizontally above selection
-        const tooltipWidth = Math.min(330, window.innerWidth - 20);
-        const screenPadding = 10;
+        // Extract paragraph/sentence token context
+        let contextText = rawText;
+        if (range.commonAncestorContainer) {
+          const parentText = range.commonAncestorContainer.textContent || "";
+          if (parentText.trim()) {
+            contextText = parentText.trim();
+          }
+        }
+
+        // Clean & split into tokens
+        const allTokens = contextText
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+
+        const activeTokens = allTokens.length > 0 ? allTokens : [rawText];
+
+        // Locate rawText in activeTokens
+        let foundStart = 0;
+        let foundEnd = 0;
+
+        const rawWords = rawText.split(/\s+/).filter(Boolean);
+        const firstWord = rawWords[0] || rawText;
+
+        const matchIdx = activeTokens.findIndex((t) =>
+          t.toLowerCase().includes(firstWord.toLowerCase()),
+        );
+
+        if (matchIdx !== -1) {
+          foundStart = matchIdx;
+          foundEnd = Math.min(activeTokens.length - 1, matchIdx + rawWords.length - 1);
+        }
+
+        const tooltipWidth = Math.min(310, window.innerWidth - 16);
+        const screenPadding = 8;
         const centeredLeft = rect.left + rect.width / 2 - tooltipWidth / 2;
         const clampedLeft = Math.max(
           screenPadding,
           Math.min(window.innerWidth - tooltipWidth - screenPadding, centeredLeft),
         );
 
-        // If selection is near top of window, place below
-        const placeBelow = rect.top < 140;
-        const top = placeBelow ? rect.bottom + 10 : rect.top - 10;
+        const placeBelow = rect.top < 120;
+        const top = placeBelow ? rect.bottom + 8 : rect.top - 8;
 
-        setSelectedText(text);
+        const cleanSelectedText = activeTokens.slice(foundStart, foundEnd + 1).join(" ");
+
+        setTokens(activeTokens);
+        setStartIdx(foundStart);
+        setEndIdx(foundEnd);
+        setSelectedText(cleanSelectedText || rawText);
         setPosition({ top, left: clampedLeft, placeBelow });
         setForcedTarget(null);
 
-        // Auto-run translation immediately
-        runTranslation(text);
+        // Run translation
+        runTranslation(cleanSelectedText || rawText);
 
-        // On mobile: auto-repeat 3 times when highlighted if auto-repeat is enabled
+        // Auto-repeat on mobile if enabled
         const isMobile = window.innerWidth < 768 || "ontouchstart" in window;
         if (isMobile && autoRepeatOnMobile) {
-          const lang = detectLanguage(text);
-          void handlePlayRepeatAudio(text, lang, 3);
+          const lang = detectLanguage(cleanSelectedText || rawText);
+          void handlePlayRepeatAudio(cleanSelectedText || rawText, lang, 3);
         }
-      }, 150);
+      }, 120);
     };
 
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
       if (tooltipRef.current && tooltipRef.current.contains(e.target as Node)) {
         return;
-      }
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) {
-        clearSelectionState();
       }
     };
 
@@ -266,16 +407,18 @@ export function HighlightTranslateTooltip() {
       }
     };
 
-    document.addEventListener("selectionchange", handleSelectionChange);
+    document.addEventListener("selectionchange", processSelectionOrPoint);
+    document.addEventListener("mouseup", processSelectionOrPoint);
+    document.addEventListener("touchend", processSelectionOrPoint);
     document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown, { passive: true });
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.clearTimeout(timeoutId);
-      document.removeEventListener("selectionchange", handleSelectionChange);
+      document.removeEventListener("selectionchange", processSelectionOrPoint);
+      document.removeEventListener("mouseup", processSelectionOrPoint);
+      document.removeEventListener("touchend", processSelectionOrPoint);
       document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
       abortControllerRef.current?.abort();
       audioHandleRef.current?.stop();
@@ -289,7 +432,7 @@ export function HighlightTranslateTooltip() {
     runTranslation(selectedText, nextTarget);
   };
 
-  // Copy translated or alternative text
+  // Copy text
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -300,49 +443,9 @@ export function HighlightTranslateTooltip() {
     }
   };
 
-  // Full Doc translation handler
-  const handleFullDocTranslate = async () => {
-    setFullDocOpen(true);
-    setFullDocTranslating(true);
-    setFullDocProgress({ completed: 0, total: 0 });
-    setFullDocResult("");
-
-    let docText = "";
-    const deck = loadDeck();
-    if (deck && deck.sourceText) {
-      docText = deck.sourceText;
-    } else {
-      const articleEl = document.querySelector("main") || document.body;
-      docText = articleEl.innerText.trim();
-    }
-
-    if (!docText) {
-      docText = selectedText;
-    }
-
-    const docLang = detectLanguage(docText);
-    const target = docLang === "ar" ? "en" : "ar";
-
-    try {
-      const res = await batchTranslate(docText, {
-        sourceLang: docLang,
-        targetLang: target,
-        concurrency: 6,
-        onProgress: (completed, total) => {
-          setFullDocProgress({ completed, total });
-        },
-      });
-      setFullDocResult(res.translatedText);
-    } catch (e) {
-      console.error("Full doc translation error", e);
-    } finally {
-      setFullDocTranslating(false);
-    }
-  };
-
   return (
     <>
-      {/* Floating Tooltip */}
+      {/* Compact Floating Window */}
       {position && selectedText && (
         <div
           ref={tooltipRef}
@@ -351,183 +454,227 @@ export function HighlightTranslateTooltip() {
             left: `${position.left}px`,
             transform: position.placeBelow ? "none" : "translateY(-100%)",
           }}
-          className="fixed z-50 w-80 max-w-[92vw] rounded-2xl border border-border/80 bg-popover/95 p-3 text-popover-foreground shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
+          className="fixed z-50 w-[310px] max-w-[92vw] rounded-xl border border-border/80 bg-popover/95 p-2 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 select-none"
           role="tooltip"
         >
-          {/* Header Action Bar */}
-          <div className="mb-2 flex items-center justify-between border-b border-border/50 pb-2">
-            <div className="flex items-center gap-1.5">
+          {/* Header Bar: Selection info & Range Extension */}
+          <div className="flex items-center justify-between gap-1 pb-1.5 border-b border-border/40 text-xs">
+            <div className="flex items-center gap-1 min-w-0">
               <button
                 type="button"
                 onClick={handleSwapLanguage}
-                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-colors cursor-pointer"
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-colors cursor-pointer shrink-0"
                 title="Swap translation direction"
               >
                 <span>{detectedLang.toUpperCase()}</span>
-                <ArrowLeftRight className="size-3 text-muted-foreground" />
+                <ArrowLeftRight className="size-2.5 text-muted-foreground" />
                 <span>{targetLang.toUpperCase()}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => runTranslation(selectedText, forcedTarget || undefined)}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                title={detectedLang === "en" ? "Translate · ترجم" : "Translate → EN"}
+              <span
+                className="truncate text-[11px] font-semibold text-primary max-w-[100px]"
+                title={selectedText}
               >
-                <Languages className="size-3.5" />
-                <span>{detectedLang === "en" ? "Translate" : "Translate"}</span>
-              </button>
+                {selectedText}
+              </span>
+              {tokens.length > 1 && (
+                <span className="text-[9px] text-muted-foreground font-mono shrink-0">
+                  ({endIdx - startIdx + 1}w)
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-1">
-              {/* Add to Notes Button */}
-              <button
-                type="button"
-                onClick={handleAddToNotes}
-                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all cursor-pointer"
-                title="Save highlighted text directly to Notes"
-              >
-                {savedNote ? (
-                  <Check className="size-3 text-emerald-400" />
-                ) : (
-                  <StickyNote className="size-3" />
-                )}
-                <span>{savedNote ? "Saved!" : "+ Note"}</span>
-              </button>
+            {/* Range controls: Extend left / right, 1w, All */}
+            <div className="flex items-center gap-0.5 shrink-0">
+              {tokens.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleExtendLeft}
+                    disabled={startIdx <= 0}
+                    className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30 cursor-pointer"
+                    title="Extend left (←)"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
 
-              {/* Write 3x Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsWriteModalOpen(true)}
-                className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 transition-all cursor-pointer"
-                title="Open 3× Writing Practice modal"
-              >
-                <PenTool className="size-3" />
-                <span>Write 3×</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={handleSelectWordOnly}
+                    className="rounded px-1 py-0.5 text-[9px] font-bold bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    title="Select single word"
+                  >
+                    1w
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSelectFullSentence}
+                    className="rounded px-1 py-0.5 text-[9px] font-bold bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    title="Select full sentence"
+                  >
+                    All
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExtendRight}
+                    disabled={endIdx >= tokens.length - 1}
+                    className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30 cursor-pointer"
+                    title="Extend right (→)"
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                </>
+              )}
 
               <button
                 type="button"
                 onClick={clearSelectionState}
-                className="rounded-md p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors cursor-pointer"
-                aria-label="Close"
+                className="rounded p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors cursor-pointer ml-1"
+                aria-label="Close window"
               >
                 <X className="size-3.5" />
               </button>
             </div>
           </div>
 
-          {/* Translation Body */}
-          <div className="space-y-2">
+          {/* Interactive Word Chips (if sentence tokens exist) */}
+          {tokens.length > 1 && (
+            <div className="flex flex-wrap gap-1 max-h-12 overflow-y-auto py-1 border-b border-border/30 text-[10px]">
+              {tokens.map((tok, idx) => {
+                const isSel = idx >= startIdx && idx <= endIdx;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleTokenClick(idx)}
+                    className={cn(
+                      "px-1 py-0.5 rounded text-[10px] transition-all cursor-pointer truncate max-w-[90px]",
+                      isSel
+                        ? "bg-primary text-primary-foreground font-semibold shadow-2xs"
+                        : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
+                    )}
+                  >
+                    {tok}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Translation Result Area */}
+          <div className="py-1.5 space-y-1">
             {isLoading ? (
-              <div className="flex items-center justify-center py-4 gap-2 text-xs text-muted-foreground">
-                <Loader2 className="size-4 animate-spin text-primary" />
-                <span>Translating · جارٍ الترجمة...</span>
+              <div className="flex items-center justify-center py-2 gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+                <span>Translating...</span>
               </div>
             ) : translation ? (
               <>
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-1.5">
                   <p
-                    className="text-sm font-semibold leading-snug text-foreground break-words"
+                    className="text-xs sm:text-sm font-medium leading-snug text-foreground break-words max-w-[210px]"
                     dir={translation.targetLang === "ar" ? "rtl" : "ltr"}
                   >
                     {translation.text}
                   </p>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-0.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => toggleRepeatAudio(translation.text, translation.targetLang, 3)}
-                      className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-primary transition-colors cursor-pointer"
-                      title="Repeat translation 3×"
+                      className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                      title="Repeat 3×"
                     >
                       <Volume2 className="size-3" />
-                      <span className="text-[10px] font-bold">3×</span>
+                      <span>3×</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePlayAudio(translation.text, translation.targetLang)}
                       className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
-                      title="Speak translation 1×"
+                      title="Speak 1×"
                     >
-                      <Volume2 className="size-3.5" />
+                      <Volume2 className="size-3" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleCopy(translation.text)}
                       className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
-                      title="Copy translation"
+                      title="Copy"
                     >
                       {copied ? (
-                        <Check className="size-3.5 text-emerald-400" />
+                        <Check className="size-3 text-emerald-400" />
                       ) : (
-                        <Copy className="size-3.5" />
+                        <Copy className="size-3" />
                       )}
                     </button>
                   </div>
                 </div>
 
-                {/* Clickable Dictionary Alternatives */}
+                {/* Alternatives */}
                 {translation.alternatives && translation.alternatives.length > 0 && (
-                  <div className="pt-1.5 border-t border-border/40">
-                    <span className="mb-1 block text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                      Alternatives · البدائل
-                    </span>
-                    <div className="flex flex-wrap gap-1">
-                      {translation.alternatives.slice(0, 5).map((alt, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setTranslation({ ...translation, text: alt });
-                            handleCopy(alt);
-                          }}
-                          className="rounded-full bg-secondary/80 hover:bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground hover:text-primary transition-colors cursor-pointer"
-                          title="Click to select & copy synonym"
-                        >
-                          {alt}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {translation.alternatives.slice(0, 3).map((alt, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setTranslation({ ...translation, text: alt });
+                          handleCopy(alt);
+                        }}
+                        className="rounded bg-secondary/80 hover:bg-secondary px-1.5 py-0.5 text-[9px] text-secondary-foreground hover:text-primary transition-colors cursor-pointer"
+                      >
+                        {alt}
+                      </button>
+                    ))}
                   </div>
                 )}
-
-                {/* Repeat Controls & Auto-play toggle */}
-                <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span
-                      className={`size-1.5 rounded-full ${
-                        isPlayingAudio && repeatIteration !== null
-                          ? "bg-amber-500 animate-ping"
-                          : "bg-emerald-500"
-                      }`}
-                    />
-                    <span>
-                      {isPlayingAudio && repeatIteration !== null
-                        ? `Repeating ${repeatIteration} of ${repeatTotal}…`
-                        : "3× Audio Repeat"}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !autoRepeatOnMobile;
-                      setAutoRepeatOnMobile(next);
-                      if (typeof window !== "undefined") {
-                        localStorage.setItem("fc_auto_repeat_3x", String(next));
-                      }
-                    }}
-                    className="hover:underline text-foreground/80 font-medium cursor-pointer"
-                    title="Toggle automatic 3x playback when selecting text"
-                  >
-                    Auto-play: {autoRepeatOnMobile ? "ON" : "OFF"}
-                  </button>
-                </div>
               </>
-            ) : (
-              <div className="py-2 text-center text-xs text-muted-foreground">
-                Highlight text to translate, save to notes, or practice 3×
-              </div>
-            )}
+            ) : null}
+          </div>
+
+          {/* Quick Action Footer */}
+          <div className="flex items-center justify-between border-t border-border/40 pt-1 text-[10px]">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleAddToNotes}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all cursor-pointer"
+                title="Save to Notes"
+              >
+                {savedNote ? (
+                  <Check className="size-3 text-emerald-400" />
+                ) : (
+                  <StickyNote className="size-3" />
+                )}
+                <span>{savedNote ? "Saved" : "+ Note"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsWriteModalOpen(true)}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 transition-all cursor-pointer"
+                title="Practice writing 3×"
+              >
+                <PenTool className="size-3" />
+                <span>Write 3×</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = !autoRepeatOnMobile;
+                setAutoRepeatOnMobile(next);
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("fc_auto_repeat_3x", String(next));
+                }
+              }}
+              className="text-[9px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              3x Repeat: <span className="font-bold">{autoRepeatOnMobile ? "ON" : "OFF"}</span>
+            </button>
           </div>
         </div>
       )}
@@ -544,92 +691,6 @@ export function HighlightTranslateTooltip() {
             clearSelectionState();
           }}
         />
-      )}
-
-      {/* Full Document Translation Dialog */}
-      {fullDocOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl text-card-foreground">
-            <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h2 className="text-lg font-bold">Full Document Translation</h2>
-                <p className="text-xs text-muted-foreground">
-                  High-speed parallel chunk translation (English ↔ Arabic)
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFullDocOpen(false)}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            {fullDocTranslating && (
-              <div className="my-6 space-y-2 text-center">
-                <div className="flex items-center justify-center gap-2 text-primary">
-                  <Loader2 className="size-5 animate-spin" />
-                  <span className="font-medium text-sm">
-                    Translating chunks {fullDocProgress.completed} of {fullDocProgress.total}...
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full bg-primary transition-all duration-200"
-                    style={{
-                      width: fullDocProgress.total
-                        ? `${(fullDocProgress.completed / fullDocProgress.total) * 100}%`
-                        : "20%",
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {fullDocResult && (
-              <div className="space-y-4">
-                <div
-                  className="max-h-96 overflow-y-auto rounded-xl border border-border/60 bg-muted/40 p-4 text-sm whitespace-pre-wrap leading-relaxed"
-                  dir={detectLanguage(fullDocResult) === "ar" ? "rtl" : "ltr"}
-                >
-                  {fullDocResult}
-                </div>
-
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(fullDocResult);
-                      setFullDocCopied(true);
-                      setTimeout(() => setFullDocCopied(false), 2000);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
-                  >
-                    {fullDocCopied ? (
-                      <>
-                        <Check className="size-4 text-emerald-300" />
-                        <span>Copied Translation!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="size-4" />
-                        <span>Copy Full Translation</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFullDocOpen(false)}
-                    className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium hover:bg-secondary/80 cursor-pointer"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
       )}
     </>
   );

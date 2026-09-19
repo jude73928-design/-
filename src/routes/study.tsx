@@ -917,27 +917,20 @@ function Study() {
             {/* Card Body Text & Recall State */}
             <div className="flex-1 flex flex-col justify-center my-3 overflow-y-auto min-h-0 select-text">
               {recallMode && !revealed && playsCount >= 2 ? (
-                <div className="flex flex-col items-center justify-center text-center p-4 space-y-4">
+                <div className="flex flex-col items-center justify-center text-center p-4 space-y-3">
                   <div className="text-xs text-muted-foreground font-medium">
                     Recall Mode Active
                   </div>
-                  {/* Fluid 60fps Hold Button */}
-                  <HoldButton
-                    onComplete={() => setRevealed(true)}
-                    label="Hold to Reveal Card"
-                    sublabel="Press and hold for 0.4s"
-                    icon={<Eye className="size-4 text-primary" />}
-                    className="w-full max-w-xs py-4"
-                  />
                   <button
                     type="button"
                     onClick={() => {
                       playClick();
                       setRevealed(true);
                     }}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+                    className="w-full max-w-xs py-3 px-4 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Or tap to show directly
+                    <Eye className="size-4" />
+                    <span>Press to Reveal Card</span>
                   </button>
                 </div>
               ) : (
