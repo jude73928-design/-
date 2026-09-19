@@ -75,6 +75,13 @@ export function HighlightTranslateTooltip() {
     abortControllerRef.current = null;
     audioHandleRef.current?.stop();
     audioHandleRef.current = null;
+    try {
+      if (typeof window !== "undefined") {
+        window.getSelection()?.removeAllRanges();
+      }
+    } catch {
+      // ignore
+    }
     setSelectedText("");
     setTokens([]);
     setStartIdx(0);
@@ -205,9 +212,6 @@ export function HighlightTranslateTooltip() {
       const newText = tokens.slice(nextStart, endIdx + 1).join(" ");
       setSelectedText(newText);
       runTranslation(newText, forcedTarget || undefined);
-      if (autoRepeatOnMobile) {
-        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
-      }
     }
   };
 
@@ -218,9 +222,6 @@ export function HighlightTranslateTooltip() {
       const newText = tokens.slice(startIdx, nextEnd + 1).join(" ");
       setSelectedText(newText);
       runTranslation(newText, forcedTarget || undefined);
-      if (autoRepeatOnMobile) {
-        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
-      }
     }
   };
 
@@ -230,9 +231,6 @@ export function HighlightTranslateTooltip() {
       const newText = tokens[startIdx] || selectedText;
       setSelectedText(newText);
       runTranslation(newText, forcedTarget || undefined);
-      if (autoRepeatOnMobile) {
-        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
-      }
     }
   };
 
@@ -243,9 +241,6 @@ export function HighlightTranslateTooltip() {
       const newText = tokens.join(" ");
       setSelectedText(newText);
       runTranslation(newText, forcedTarget || undefined);
-      if (autoRepeatOnMobile) {
-        void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
-      }
     }
   };
 
@@ -268,9 +263,6 @@ export function HighlightTranslateTooltip() {
     const newText = tokens.slice(nextStart, nextEnd + 1).join(" ");
     setSelectedText(newText);
     runTranslation(newText, forcedTarget || undefined);
-    if (autoRepeatOnMobile) {
-      void handlePlayRepeatAudio(newText, detectLanguage(newText), 3);
-    }
   };
 
   // Text Selection & Tap Listener
@@ -281,50 +273,33 @@ export function HighlightTranslateTooltip() {
       window.clearTimeout(timeoutId);
       timeoutId = window.setTimeout(() => {
         const selection = window.getSelection();
-        if (!selection) return;
+        if (!selection || selection.isCollapsed) return;
 
-        let rawText = "";
-        let range: Range | null = null;
+        const rawText = selection.toString().trim();
+        if (!rawText || rawText.length < 1) return;
 
-        if (!selection.isCollapsed && selection.rangeCount > 0) {
-          rawText = selection.toString().trim();
-          range = selection.getRangeAt(0);
-        } else if (selection.isCollapsed) {
-          // Attempt word expansion on single click/tap
-          try {
-            const sel = window.getSelection();
-            if (sel && sel.focusNode) {
-              const nodeText = sel.focusNode.textContent || "";
-              if (nodeText.trim().length > 0) {
-                // Expand selection to word boundaries
-                sel.modify("move", "backward", "word");
-                sel.modify("extend", "forward", "word");
-                rawText = sel.toString().trim();
-                if (sel.rangeCount > 0) {
-                  range = sel.getRangeAt(0);
-                }
-              }
-            }
-          } catch {
-            // Modify method supported in browser
-          }
-        }
+        if (selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
 
-        if (!rawText || rawText.length < 1) {
-          return;
-        }
-
-        // Ignore if click was inside tooltip or modal
+        // Ignore if selection is inside tooltip or modal or input/textarea
         if (
           tooltipRef.current &&
-          range &&
           (tooltipRef.current.contains(range.startContainer) ||
             tooltipRef.current.contains(range.endContainer))
         ) {
           return;
         }
 
-        if (!range) return;
+        const targetEl = range.startContainer.parentElement;
+        if (
+          targetEl &&
+          (targetEl.tagName === "INPUT" ||
+            targetEl.tagName === "TEXTAREA" ||
+            targetEl.isContentEditable)
+        ) {
+          return;
+        }
+
         const rect = range.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
 
@@ -384,13 +359,6 @@ export function HighlightTranslateTooltip() {
 
         // Run translation
         runTranslation(cleanSelectedText || rawText);
-
-        // Auto-repeat on mobile if enabled
-        const isMobile = window.innerWidth < 768 || "ontouchstart" in window;
-        if (isMobile && autoRepeatOnMobile) {
-          const lang = detectLanguage(cleanSelectedText || rawText);
-          void handlePlayRepeatAudio(cleanSelectedText || rawText, lang, 3);
-        }
       }, 120);
     };
 
@@ -398,6 +366,7 @@ export function HighlightTranslateTooltip() {
       if (tooltipRef.current && tooltipRef.current.contains(e.target as Node)) {
         return;
       }
+      clearSelectionState();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -411,6 +380,7 @@ export function HighlightTranslateTooltip() {
     document.addEventListener("mouseup", processSelectionOrPoint);
     document.addEventListener("touchend", processSelectionOrPoint);
     document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown, { passive: true });
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
@@ -419,6 +389,7 @@ export function HighlightTranslateTooltip() {
       document.removeEventListener("mouseup", processSelectionOrPoint);
       document.removeEventListener("touchend", processSelectionOrPoint);
       document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
       abortControllerRef.current?.abort();
       audioHandleRef.current?.stop();
@@ -454,6 +425,9 @@ export function HighlightTranslateTooltip() {
             left: `${position.left}px`,
             transform: position.placeBelow ? "none" : "translateY(-100%)",
           }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           className="fixed z-50 w-[310px] max-w-[92vw] rounded-xl border border-border/80 bg-popover/95 p-2 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 select-none"
           role="tooltip"
         >
@@ -662,19 +636,21 @@ export function HighlightTranslateTooltip() {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const next = !autoRepeatOnMobile;
-                setAutoRepeatOnMobile(next);
-                if (typeof window !== "undefined") {
-                  localStorage.setItem("fc_auto_repeat_3x", String(next));
-                }
-              }}
-              className="text-[9px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              3x Repeat: <span className="font-bold">{autoRepeatOnMobile ? "ON" : "OFF"}</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  clearSelectionState();
+                }}
+                className="flex items-center gap-0.5 rounded px-2 py-0.5 text-[10px] font-medium bg-muted hover:bg-destructive/20 hover:text-destructive text-muted-foreground transition-all cursor-pointer"
+                title="Dismiss pop up"
+              >
+                <X className="size-3" />
+                <span>Cancel</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

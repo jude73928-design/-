@@ -30,24 +30,40 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+function getValidSupabaseUrl(url?: string): string {
+  if (!url || typeof url !== "string") return "https://placeholder.supabase.co";
+  let trimmed = url.trim();
+  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
+    return "https://placeholder.supabase.co";
+  }
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    trimmed = `https://${trimmed}`;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+  } catch {
+    // Fall back if parsing fails
+  }
+  return "https://placeholder.supabase.co";
+}
+
 function createSupabaseClient() {
   // Use import.meta.env for client-side (Vite build-time replacement)
   // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL =
-    import.meta.env.VITE_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    "https://placeholder.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    "placeholder";
+  const rawUrl = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const rawKey =
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
 
-  if (
-    (!import.meta.env.VITE_SUPABASE_URL && !process.env.SUPABASE_URL) ||
-    (!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY && !process.env.SUPABASE_PUBLISHABLE_KEY)
-  ) {
+  const SUPABASE_URL = getValidSupabaseUrl(rawUrl);
+  const SUPABASE_PUBLISHABLE_KEY =
+    rawKey && rawKey !== "undefined" && rawKey !== "null" ? rawKey : "placeholder";
+
+  if (!rawUrl || !rawKey || SUPABASE_URL.includes("placeholder")) {
     console.warn(
-      `[Supabase] Missing Supabase environment variable(s). Falling back to local offline storage.`,
+      `[Supabase] Missing or invalid Supabase environment variable(s). Falling back to local offline storage.`,
     );
   }
 

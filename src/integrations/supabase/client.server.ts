@@ -32,18 +32,36 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-function createSupabaseAdminClient() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+function getValidSupabaseUrl(url?: string): string {
+  if (!url || typeof url !== "string") return "https://placeholder.supabase.co";
+  let trimmed = url.trim();
+  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
+    return "https://placeholder.supabase.co";
+  }
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    trimmed = `https://${trimmed}`;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+  } catch {
+    // Fall back if parsing fails
+  }
+  return "https://placeholder.supabase.co";
+}
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
-      ...(!SUPABASE_SERVICE_ROLE_KEY ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
+function createSupabaseAdminClient() {
+  const rawUrl = process.env.SUPABASE_URL;
+  const rawKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  const SUPABASE_URL = getValidSupabaseUrl(rawUrl);
+  const SUPABASE_SERVICE_ROLE_KEY =
+    rawKey && rawKey !== "undefined" && rawKey !== "null" ? rawKey : "placeholder";
+
+  if (!rawUrl || !rawKey || SUPABASE_URL.includes("placeholder")) {
+    console.warn(`[Supabase] Missing or invalid Supabase admin environment variable(s).`);
   }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {

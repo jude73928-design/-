@@ -31,12 +31,36 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+function getValidSupabaseUrl(url?: string): string {
+  if (!url || typeof url !== "string") return "https://placeholder.supabase.co";
+  let trimmed = url.trim();
+  if (!trimmed || trimmed === "undefined" || trimmed === "null") {
+    return "https://placeholder.supabase.co";
+  }
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    trimmed = `https://${trimmed}`;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+  } catch {
+    // Fall back if parsing fails
+  }
+  return "https://placeholder.supabase.co";
+}
+
 export const requireSupabaseAuth = createMiddleware({ type: "function" }).server(
   async ({ next }) => {
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+    const rawUrl = process.env.SUPABASE_URL;
+    const rawKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
-    if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    const SUPABASE_URL = getValidSupabaseUrl(rawUrl);
+    const SUPABASE_PUBLISHABLE_KEY =
+      rawKey && rawKey !== "undefined" && rawKey !== "null" ? rawKey : "placeholder";
+
+    if (!rawUrl || !rawKey || SUPABASE_URL.includes("placeholder")) {
       const missing = [
         ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
         ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),

@@ -284,9 +284,16 @@ function Study() {
   const handleContinueStopped = useCallback(() => {
     if (resumePrompt) {
       setIndex(resumePrompt.stoppedIndex);
+      const activeId = getActiveDeckId();
+      saveStudyProgress(
+        activeId,
+        resumePrompt.stoppedIndex,
+        queue.length,
+        queue[resumePrompt.stoppedIndex]?.id,
+      );
       setResumePrompt(null);
     }
-  }, [resumePrompt]);
+  }, [resumePrompt, queue]);
 
   useEffect(() => {
     currentTextRef.current = current?.text ?? "";
@@ -491,17 +498,36 @@ function Study() {
 
     const activeId = getActiveDeckId();
     const prog = getStudyProgress(activeId);
-    if (prog && prog.index > 0 && prog.index < cardQueue.length) {
-      setResumePrompt({ stoppedIndex: prog.index, total: prog.totalCards || cardQueue.length });
-      setIndex(prog.index);
-    } else if (
-      d.lastStudiedIndex &&
-      d.lastStudiedIndex > 0 &&
-      d.lastStudiedIndex < cardQueue.length
-    ) {
-      setIndex(d.lastStudiedIndex);
+    const stoppedIndex =
+      prog && prog.index > 0 && prog.index < cardQueue.length
+        ? prog.index
+        : d.lastStudiedIndex && d.lastStudiedIndex > 0 && d.lastStudiedIndex < cardQueue.length
+          ? d.lastStudiedIndex
+          : 0;
+
+    if (stoppedIndex > 0) {
+      setResumePrompt({
+        stoppedIndex,
+        total: prog?.totalCards || cardQueue.length,
+      });
+      setIndex(0);
+    } else {
+      setIndex(0);
+      setResumePrompt(null);
     }
   }, [navigate]);
+
+  // Auto-sync progress when index changes
+  useEffect(() => {
+    if (!deck || queue.length === 0 || resumePrompt) return;
+    const activeId = getActiveDeckId();
+    saveStudyProgress(activeId, index, queue.length, queue[index]?.id);
+    if (deck.lastStudiedIndex !== index) {
+      const updated = { ...deck, lastStudiedIndex: index };
+      setDeck(updated);
+      saveDeck(updated);
+    }
+  }, [index, deck, queue, resumePrompt]);
 
   // keyboard
   useEffect(() => {
