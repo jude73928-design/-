@@ -1,6 +1,6 @@
 {
   "name": "الاهلي ف كل حتة",
-  "description": "Imported from GitHub: jude73928-design/navy-mind-brew",
+  "description": "Interactive multilingual flashcard study platform with tactile sound feedback, speech synthesis, and instant translation.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

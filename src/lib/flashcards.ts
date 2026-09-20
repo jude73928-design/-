@@ -483,7 +483,7 @@ export function createDeckFromAllStarred(decks: SavedDeck[], newName?: string): 
   };
 }
 
-export async function upsertSavedDeck(deck: Deck, name?: string, id?: string): Promise<SavedDeck> {
+export function upsertSavedDeckSync(deck: Deck, name?: string, id?: string): SavedDeck {
   const decks = readLocalDecks();
   const rawName = name || deck.name || deck.sourceText.trim().split(/\s+/).slice(0, 8).join(" ");
   const cleanName = cleanNaturalText(rawName).slice(0, 80) || "Untitled Deck";
@@ -537,6 +537,10 @@ export async function upsertSavedDeck(deck: Deck, name?: string, id?: string): P
     );
   }
   return entry;
+}
+
+export async function upsertSavedDeck(deck: Deck, name?: string, id?: string): Promise<SavedDeck> {
+  return upsertSavedDeckSync(deck, name, id);
 }
 
 export async function deleteSavedDeck(id: string) {

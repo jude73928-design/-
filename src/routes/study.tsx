@@ -61,7 +61,18 @@ import {
   Settings2,
   Pencil,
 } from "lucide-react";
-import { playClick, playCorrect, playClimax } from "@/lib/sounds";
+import {
+  playClick,
+  playCorrect,
+  playClimax,
+  playMutedTick,
+  playCardTransition,
+  getSoundTheme,
+  setSoundTheme,
+  previewSoundTheme,
+  SOUND_THEMES,
+  type SoundTheme,
+} from "@/lib/sounds";
 import { PomodoroWidget } from "@/components/PomodoroWidget";
 import { CardTypeDot } from "@/components/CardTypeDot";
 import { translatePhrase } from "@/services/translator";
@@ -69,6 +80,7 @@ import { FullTextTranslateModal } from "@/components/FullTextTranslateModal";
 import { HoldButton } from "@/components/HoldButton";
 import { WriteRepeatModal } from "@/components/WriteRepeatModal";
 import { QuickQuestionNoteModal } from "@/components/QuickQuestionNoteModal";
+import { InteractiveCardText } from "@/components/InteractiveCardText";
 
 export const Route = createFileRoute("/study")({
   component: Study,
@@ -128,6 +140,27 @@ function Study() {
   const [targetModalType, setTargetModalType] = useState<CardType | undefined>(undefined);
 
   const [freeNotes, setFreeNotes] = useState<{ id: string; text: string }[]>([]);
+  // Sound theme state (wood chop, muted tech, soft pop, etc.)
+  const [soundTheme, setSoundThemeState] = useState<SoundTheme>("onetick");
+
+  const handleSoundThemeChange = useCallback((theme: SoundTheme) => {
+    setSoundThemeState(theme);
+    setSoundTheme(theme);
+    previewSoundTheme(theme);
+  }, []);
+
+  useEffect(() => {
+    setSoundThemeState(getSoundTheme());
+    const handleThemeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<SoundTheme>;
+      if (customEvent.detail) {
+        setSoundThemeState(customEvent.detail);
+      }
+    };
+    window.addEventListener("flashcards-sound-theme-changed", handleThemeChange);
+    return () => window.removeEventListener("flashcards-sound-theme-changed", handleThemeChange);
+  }, []);
+
   // Card-only translation state
   const [cardTranslations, setCardTranslations] = useState<
     Record<string, { text: string; targetLang: "ar" | "en"; alternatives?: string[] }>
@@ -171,6 +204,14 @@ function Study() {
     setIsPlaying(false);
     setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    const handleGlobalStop = () => {
+      stopSpeech();
+    };
+    window.addEventListener("fc-stop-speech", handleGlobalStop);
+    return () => window.removeEventListener("fc-stop-speech", handleGlobalStop);
+  }, [stopSpeech]);
 
   const speak = useCallback(
     async (text: string, forceLang?: "ar" | "en"): Promise<TtsEndReason> => {
@@ -325,7 +366,7 @@ function Study() {
   const switchAndAdvance = useCallback(
     (targetType?: CardType) => {
       if (!deck || !current) return;
-      playClick();
+      playCardTransition("next");
       stopSpeech();
 
       const currentType = getCardType(current);
@@ -363,7 +404,7 @@ function Study() {
   const grade = useCallback(
     (g: 1 | 2 | 3 | 4) => {
       if (!deck || !current) return;
-      playClick();
+      playCardTransition("next");
       stopSpeech();
       const currentType = current.cardType || getCardType(current) || "fact";
       const updatedCard: Card = { ...applyGrade(current, g), cardType: currentType };
@@ -396,7 +437,7 @@ function Study() {
   );
 
   const undo = useCallback(() => {
-    playClick();
+    playCardTransition("prev");
     stopSpeech();
     if (history.length > 0) {
       const last = history[history.length - 1];
@@ -605,13 +646,34 @@ function Study() {
       setPlaysCount((c) => c + 1);
       const reason = await speak(current.text);
       if (cancelled || !autoPlay) return;
+      // Do not auto-advance if translation tooltip is active, or if user opened any modal/drawer
+      if (
+        (window as unknown as { __fc_translation_active?: boolean }).__fc_translation_active ||
+        isDeckTranslateOpen ||
+        practiceWord ||
+        questionNoteModalOpen ||
+        showNotesDrawer ||
+        showSettingsDrawer
+      ) {
+        return;
+      }
       if (reason === "ended" && !recallMode) grade(3);
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlay, current?.id, done]);
+  }, [
+    autoPlay,
+    current?.id,
+    done,
+    isDeckTranslateOpen,
+    practiceWord,
+    questionNoteModalOpen,
+    showNotesDrawer,
+    showSettingsDrawer,
+    recallMode,
+  ]);
 
   const progress = total === 0 ? 0 : (Math.min(index, total) / total) * 100;
   const arabic = current && isArabic(current.text);
@@ -785,11 +847,25 @@ function Study() {
                 const nextIdx = (SPEED_PRESETS.indexOf(wpm) + 1) % SPEED_PRESETS.length;
                 setWpm(SPEED_PRESETS[nextIdx]);
               }}
-              className="inline-flex items-center gap-1 rounded-full bg-secondary/80 hover:bg-secondary px-2.5 py-1 text-[11px] font-mono font-semibold text-foreground transition-all active:scale-95"
+              className="inline-flex items-center gap-1 rounded-full bg-secondary/80 hover:bg-secondary px-2.5 py-1 text-[11px] font-mono font-semibold text-foreground transition-all active:scale-95 cursor-pointer"
               title="Click to cycle playback speed"
             >
               <Volume2 className="size-3 text-primary" />
               <span>{wpm} WPM</span>
+            </button>
+
+            {/* Sound Theme Quick Cycle */}
+            <button
+              type="button"
+              onClick={() => {
+                const currentIdx = SOUND_THEMES.findIndex((t) => t.id === soundTheme);
+                const nextTheme = SOUND_THEMES[(currentIdx + 1) % SOUND_THEMES.length].id;
+                handleSoundThemeChange(nextTheme);
+              }}
+              className="inline-flex items-center gap-1 rounded-full bg-secondary/80 hover:bg-secondary px-2.5 py-1 text-[11px] font-semibold text-foreground transition-all active:scale-95 cursor-pointer"
+              title="Click to cycle transition sounds (Wood Chop, Muted Tech, Soft Pop, etc.)"
+            >
+              <span>{SOUND_THEMES.find((t) => t.id === soundTheme)?.badge || "🪵 Sound"}</span>
             </button>
 
             {/* Notes Button with count badge */}
@@ -906,6 +982,30 @@ function Study() {
                   <span>{cardViewMode === "translated" ? "Original" : "Translate"}</span>
                 </button>
 
+                {/* Choose Words to Repeat */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    const clean = cleanNaturalText(current.text);
+                    const tokens = clean.split(/\s+/).filter(Boolean);
+                    window.dispatchEvent(
+                      new CustomEvent("fc-highlight-word", {
+                        detail: {
+                          word: clean,
+                          tokens: tokens,
+                          tokenIndex: 0,
+                        },
+                      }),
+                    );
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-all active:scale-95 cursor-pointer"
+                  title="Choose which words to repeat 3×"
+                >
+                  <RotateCcw className="size-3 text-primary" />
+                  <span>Repeat Words</span>
+                </button>
+
                 {/* 3x Writing Practice */}
                 <button
                   type="button"
@@ -950,7 +1050,7 @@ function Study() {
                   <button
                     type="button"
                     onClick={() => {
-                      playClick();
+                      playMutedTick(1.2, 0.22);
                       setRevealed(true);
                     }}
                     className="w-full max-w-xs py-3 px-4 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -962,29 +1062,12 @@ function Study() {
               ) : (
                 <div className="flex flex-col justify-center">
                   {cardViewMode === "translated" && activeTranslation ? (
-                    <div
-                      dir={activeCardTargetLang === "ar" ? "rtl" : "ltr"}
-                      className={cn(
-                        "cursor-text select-text text-xl sm:text-2xl font-medium leading-relaxed text-foreground animate-in fade-in duration-100",
-                        activeCardTargetLang === "ar" && "font-serif text-2xl sm:text-3xl",
-                      )}
-                      onMouseUp={grabSelection}
-                      onTouchEnd={() => setTimeout(grabSelection, 200)}
-                    >
-                      {cleanNaturalText(activeTranslation.text)}
-                    </div>
+                    <InteractiveCardText
+                      text={activeTranslation.text}
+                      isArabic={activeCardTargetLang === "ar"}
+                    />
                   ) : (
-                    <div
-                      dir={arabic ? "rtl" : "ltr"}
-                      className={cn(
-                        "cursor-text select-text text-xl sm:text-2xl font-medium leading-relaxed text-foreground animate-in fade-in duration-100",
-                        arabic && "font-serif text-2xl sm:text-3xl",
-                      )}
-                      onMouseUp={grabSelection}
-                      onTouchEnd={() => setTimeout(grabSelection, 200)}
-                    >
-                      {cleanNaturalText(current.text)}
-                    </div>
+                    <InteractiveCardText text={current.text} isArabic={Boolean(arabic)} />
                   )}
 
                   {/* Clean Note Preview Tag if present */}
@@ -1009,8 +1092,9 @@ function Study() {
             {/* Card Footer Status */}
             <div className="flex items-center justify-between pt-2 border-t border-border/20 text-[11px] text-muted-foreground shrink-0">
               <span className="truncate">
-                Highlight any text to <span className="text-primary font-medium">Write 3×</span> or{" "}
-                <span className="text-emerald-400 font-medium">Add to Notes</span>
+                Tap any word to <span className="text-primary font-medium">Translate</span>,{" "}
+                <span className="text-primary font-medium">Repeat 3×</span>, or{" "}
+                <span className="text-emerald-400 font-medium">Write 3×</span>
               </span>
               <span className="shrink-0 ml-2 font-mono">
                 {current.reps || 0} reps · {current.due ? formatDue(current.due) : "New"}
@@ -1246,6 +1330,48 @@ function Study() {
                 step={10}
                 onValueChange={(v) => setWpm(v[0])}
               />
+            </div>
+
+            {/* Transition Sound Theme Selection */}
+            <div className="rounded-2xl border border-border p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between font-semibold text-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Volume2 className="size-3.5 text-primary" />
+                  <span>Card Transition Sound</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground font-normal">
+                  Tap to preview
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {SOUND_THEMES.map((theme) => {
+                  const isSelected = soundTheme === theme.id;
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => handleSoundThemeChange(theme.id)}
+                      className={cn(
+                        "flex flex-col items-start p-2.5 rounded-xl text-left transition-all border cursor-pointer active:scale-95",
+                        isSelected
+                          ? "bg-primary/10 border-primary text-foreground font-semibold shadow-xs"
+                          : "bg-secondary/40 border-border/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs">{theme.badge}</span>
+                        {isSelected && <Check className="size-3 text-primary" />}
+                      </div>
+                      <span className="text-xs font-semibold mt-1 text-foreground">
+                        {theme.name}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground leading-tight line-clamp-1 mt-0.5">
+                        {theme.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Toggles */}

@@ -38,6 +38,7 @@ import { DeckLabelToggle } from "@/components/DeckLabelToggle";
 import { ImportDeckModal } from "@/components/ImportDeckModal";
 import { CardTypeDot } from "@/components/CardTypeDot";
 import { FullTextTranslateModal } from "@/components/FullTextTranslateModal";
+import { playClick } from "@/lib/sounds";
 
 function encodeDeck(d: SavedDeck): string {
   const payload = JSON.stringify({ name: d.name, deck: d.deck });
@@ -57,8 +58,9 @@ export const Route = createFileRoute("/dashboard")({
 
 function Dashboard() {
   const navigate = useNavigate();
-  const [decks, setDecks] = useState<SavedDeck[]>(() => listDecksCached());
-  const [isLoading, setIsLoading] = useState(() => listDecksCached().length === 0);
+  const [decks, setDecks] = useState<SavedDeck[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -69,6 +71,7 @@ function Dashboard() {
   const [hasActiveDeck, setHasActiveDeck] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     setHasActiveDeck(Boolean(localStorage.getItem("flashcards-deck-v1")));
     const cached = listDecksCached();
     if (cached.length > 0) {
@@ -114,6 +117,7 @@ function Dashboard() {
   };
 
   const open = (d: SavedDeck) => {
+    playClick();
     setActiveDeckId(d.id);
     saveDeck(d.deck);
     navigate({ to: "/study" });
@@ -209,7 +213,7 @@ function Dashboard() {
                 Home
               </Link>
             </Button>
-            {hasActiveDeck && (
+            {isMounted && hasActiveDeck && (
               <Button
                 asChild
                 variant="outline"
@@ -231,11 +235,13 @@ function Dashboard() {
           <div>
             <h1 className="text-3xl font-bold">Saved Decks</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {decks.length} deck{decks.length === 1 ? "" : "s"} saved · Cloud sync supported
+              {isMounted
+                ? `${decks.length} deck${decks.length === 1 ? "" : "s"} saved · Cloud sync supported`
+                : "Saved study decks · Cloud sync supported"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {totalStarredAcrossAll > 0 && (
+            {isMounted && totalStarredAcrossAll > 0 && (
               <Button
                 size="sm"
                 variant="outline"
@@ -319,7 +325,7 @@ function Dashboard() {
           </BreakRestrictedComponent>
         </div>
 
-        {isLoading && decks.length === 0 ? (
+        {!isMounted || (isLoading && decks.length === 0) ? (
           <div className="rounded-2xl border border-border bg-card p-10 text-center flex flex-col items-center justify-center gap-3">
             <RefreshCw className="size-6 animate-spin text-primary" />
             <span className="text-sm font-medium text-muted-foreground">
@@ -337,12 +343,18 @@ function Dashboard() {
               const deckStarredCount = (d.deck?.cards || []).filter((c) => c.starred).length;
               const isOpen = openId === d.id;
               return (
-                <li key={d.id} className="rounded-2xl border border-border bg-card p-3.5 sm:p-4">
+                <li
+                  key={d.id}
+                  className="group rounded-2xl border border-border bg-card p-3.5 sm:p-4 hover:border-primary/40 hover:shadow-md transition-all"
+                >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       <button
-                        onClick={() => setOpenId(isOpen ? null : d.id)}
-                        className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenId(isOpen ? null : d.id);
+                        }}
+                        className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted cursor-pointer"
                         title="Show cards"
                       >
                         {isOpen ? (
@@ -351,13 +363,19 @@ function Dashboard() {
                           <ChevronRight className="size-4" />
                         )}
                       </button>
-                      <div className="min-w-0 flex-1">
+                      <div
+                        className="min-w-0 flex-1 cursor-pointer"
+                        onClick={() => {
+                          if (editId !== d.id) open(d);
+                        }}
+                      >
                         {editId === d.id ? (
                           <input
                             autoFocus
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
                             onBlur={() => saveRename(d.id)}
+                            onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") saveRename(d.id);
                               if (e.key === "Escape") setEditId(null);
@@ -367,14 +385,17 @@ function Dashboard() {
                           />
                         ) : (
                           <h3
-                            className="text-base sm:text-lg font-bold text-foreground break-words leading-tight"
+                            className="text-base sm:text-lg font-bold text-foreground group-hover:text-primary transition-colors break-words leading-tight cursor-pointer"
                             dir="auto"
-                            title={d.name}
+                            title={`Click to study "${d.name}"`}
                           >
                             {d.name || "Untitled Deck"}
                           </h3>
                         )}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <div
+                          className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <span>
                             {d.deck.cards.length} cards · {due} due ·{" "}
                             {new Date(d.updatedAt).toLocaleDateString()}
@@ -396,7 +417,10 @@ function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                    <div
+                      className="flex items-center justify-between sm:justify-end gap-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
                         size="sm"
                         onClick={() => open(d)}

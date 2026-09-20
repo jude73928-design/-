@@ -10,12 +10,13 @@ import {
   loadDeck,
   saveDeck,
   setActiveDeckId,
-  upsertSavedDeck,
+  upsertSavedDeckSync,
   type Deck,
 } from "@/lib/flashcards";
 import { LayoutDashboard } from "lucide-react";
 import { PomodoroWidget } from "@/components/PomodoroWidget";
 import { TextTranslateQuickBar } from "@/components/TextTranslateQuickBar";
+import { playClick } from "@/lib/sounds";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -77,11 +78,12 @@ function Home() {
       ? existing
       : { ...buildDeck(text, maxWords), name: name.trim() || undefined };
 
-  // Read while studying: save to decks + open study
-  const startNew = async () => {
+  // Read while studying: save to decks + open study instantly
+  const startNew = () => {
     if (!text.trim()) return;
+    playClick();
     const deck = makeDeck();
-    const saved = await upsertSavedDeck(deck, name.trim() || undefined);
+    const saved = upsertSavedDeckSync(deck, name.trim() || undefined);
     setActiveDeckId(saved.id);
     saveDeck(deck);
     setExisting(deck);
@@ -91,6 +93,7 @@ function Home() {
   // Read without saving: study locally, not added to saved decks
   const readOnly = () => {
     if (!text.trim()) return;
+    playClick();
     const deck = makeDeck();
     setActiveDeckId(null);
     saveDeck(deck);
@@ -99,10 +102,11 @@ function Home() {
   };
 
   // Save without reading: store in decks, stay here
-  const saveOnly = async () => {
+  const saveOnly = () => {
     if (!text.trim()) return;
+    playClick();
     const deck = makeDeck();
-    await upsertSavedDeck(deck, name.trim() || undefined);
+    upsertSavedDeckSync(deck, name.trim() || undefined);
     setExisting(deck);
     navigate({ to: "/dashboard" });
   };
