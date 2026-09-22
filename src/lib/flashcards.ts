@@ -1,3 +1,10 @@
+export type Folder = {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: number;
+};
+
 export type CardType = "question" | "quote" | "fact" | "note";
 
 export const NEXT_TYPE_CYCLE: Record<CardType, CardType> = {
@@ -34,11 +41,19 @@ export type Deck = {
 const STORAGE_KEY = "flashcards-deck-v1";
 const SETTINGS_KEY = "flashcards-settings-v1";
 const DECKS_KEY = "flashcards-decks-v1";
+const FOLDERS_KEY = "flashcards-folders-v1";
 
-export type SavedDeck = { id: string; name: string; deck: Deck; updatedAt: number };
+export type SavedDeck = {
+  id: string;
+  name: string;
+  deck: Deck;
+  updatedAt: number;
+  folderId?: string;
+};
 
 import { supabase } from "@/integrations/supabase/client";
 import { getAllIdbDecks, saveIdbDecks, deleteIdbDeck } from "./idb";
+import { HISTORICAL_MIRROR_DECK } from "./seedDecks";
 
 const isSupabaseConfigured = Boolean(
   typeof window !== "undefined" &&
@@ -67,7 +82,7 @@ function safeSupabaseSync<T>(action: PromiseLike<T> | Promise<T>, errorMessage?:
 }
 
 function readLocalDecks(): SavedDeck[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return [HISTORICAL_MIRROR_DECK];
   if (memoryDecks !== null) return memoryDecks;
 
   try {
@@ -80,6 +95,18 @@ function readLocalDecks(): SavedDeck[] {
     }
   } catch {
     memoryDecks = [];
+  }
+
+  // Ensure HISTORICAL_MIRROR_DECK is in the saved decks list
+  const hasHistorical = memoryDecks.some(
+    (d) =>
+      d.id === HISTORICAL_MIRROR_DECK.id ||
+      d.name === HISTORICAL_MIRROR_DECK.name ||
+      d.deck?.name === HISTORICAL_MIRROR_DECK.name,
+  );
+  if (!hasHistorical) {
+    memoryDecks.unshift(HISTORICAL_MIRROR_DECK);
+    writeLocalDecks(memoryDecks);
   }
 
   // Trigger background hydration from IndexedDB for any fuller data
@@ -97,7 +124,7 @@ function readLocalDecks(): SavedDeck[] {
       .catch(() => {});
   }
 
-  return memoryDecks || [];
+  return memoryDecks || [HISTORICAL_MIRROR_DECK];
 }
 
 function writeLocalDecks(decks: SavedDeck[]) {
@@ -483,6 +510,88 @@ export function createDeckFromAllStarred(decks: SavedDeck[], newName?: string): 
   };
 }
 
+export function listFolders(): Folder[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveFolders(folders: Folder[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  } catch (e) {
+    console.warn("Failed to save folders", e);
+  }
+}
+
+export function createFolder(name: string, color?: string): Folder {
+  const folders = listFolders();
+  const cleanName = cleanNaturalText(name).slice(0, 50) || "New Folder";
+  const newFolder: Folder = {
+    id: `f-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    name: cleanName,
+    color: color || "indigo",
+    createdAt: Date.now(),
+  };
+  folders.push(newFolder);
+  saveFolders(folders);
+  return newFolder;
+}
+
+export function renameFolder(id: string, newName: string): Folder | null {
+  const folders = listFolders();
+  const idx = folders.findIndex((f) => f.id === id);
+  if (idx < 0) return null;
+  const cleanName = cleanNaturalText(newName).slice(0, 50) || "Untitled Folder";
+  folders[idx].name = cleanName;
+  saveFolders(folders);
+  return folders[idx];
+}
+
+export function deleteFolder(id: string): void {
+  const folders = listFolders().filter((f) => f.id !== id);
+  saveFolders(folders);
+  // Remove folderId from any deck in this folder
+  const decks = readLocalDecks();
+  let changed = false;
+  for (const d of decks) {
+    if (d.folderId === id || d.deck?.folderId === id) {
+      d.folderId = undefined;
+      if (d.deck) d.deck.folderId = undefined;
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeLocalDecks(decks);
+  }
+}
+
+export async function moveDeckToFolder(deckId: string, folderId: string | null): Promise<SavedDeck | null> {
+  const decks = readLocalDecks();
+  const idx = decks.findIndex((d) => d.id === deckId);
+  if (idx < 0) return null;
+  const targetFolderId = folderId || undefined;
+  const updatedDeck: Deck = {
+    ...decks[idx].deck,
+    folderId: targetFolderId,
+  };
+  const saved = await upsertSavedDeck(updatedDeck, decks[idx].name, deckId);
+  saved.folderId = targetFolderId;
+  const currentDecks = readLocalDecks();
+  const dIdx = currentDecks.findIndex((d) => d.id === deckId);
+  if (dIdx >= 0) {
+    currentDecks[dIdx].folderId = targetFolderId;
+    currentDecks[dIdx].deck.folderId = targetFolderId;
+    writeLocalDecks(currentDecks);
+  }
+  return saved;
+}
+
 export function upsertSavedDeckSync(deck: Deck, name?: string, id?: string): SavedDeck {
   const decks = readLocalDecks();
   const rawName = name || deck.name || deck.sourceText.trim().split(/\s+/).slice(0, 8).join(" ");
@@ -500,8 +609,11 @@ export function upsertSavedDeckSync(deck: Deck, name?: string, id?: string): Sav
     );
   }
 
+  const folderId = deck.folderId ?? (existingIdx >= 0 ? decks[existingIdx].folderId : undefined);
+
   const cleanedDeck: Deck = {
     ...deck,
+    folderId,
     name: cleanName,
     sourceText: src,
     cards: (deck.cards || []).map((c) => ({
@@ -516,6 +628,7 @@ export function upsertSavedDeckSync(deck: Deck, name?: string, id?: string): Sav
     id: entryId,
     name: cleanName,
     deck: cleanedDeck,
+    folderId,
     updatedAt: Date.now(),
   };
 
@@ -586,8 +699,8 @@ export function setActiveDeckId(id: string | null) {
   else localStorage.removeItem(ACTIVE_ID_KEY);
 }
 export function getActiveDeckId(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(ACTIVE_ID_KEY);
+  if (typeof window === "undefined") return HISTORICAL_MIRROR_DECK.id;
+  return localStorage.getItem(ACTIVE_ID_KEY) || HISTORICAL_MIRROR_DECK.id;
 }
 
 // Normalize text for recall-mode comparison (case, punctuation, Arabic diacritics)
@@ -601,12 +714,21 @@ export function normalizeForCompare(s: string): string {
 }
 
 export function loadDeck(): Deck | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") return HISTORICAL_MIRROR_DECK.deck;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.cards) && parsed.cards.length > 0) {
+        return parsed;
+      }
+    }
+    // Default to the Historical Mirror deck if nothing is active
+    saveDeck(HISTORICAL_MIRROR_DECK.deck);
+    setActiveDeckId(HISTORICAL_MIRROR_DECK.id);
+    return HISTORICAL_MIRROR_DECK.deck;
   } catch {
-    return null;
+    return HISTORICAL_MIRROR_DECK.deck;
   }
 }
 
@@ -750,22 +872,141 @@ export function getCardType(card?: Partial<Card> | null): CardType {
   return detectCardType(card.text || "", card.note);
 }
 
-export function buildDeck(text: string, maxWords: number): Deck {
-  const chunks = chunkText(text, maxWords);
+export function parseTextToCards(text: string): { cards: Card[]; autoTitle?: string } {
+  const clean = cleanNaturalText(text).trim();
+  if (!clean) return { cards: [] };
+
   const now = Date.now();
-  return {
-    sourceText: text,
-    maxWords,
-    lastStudiedIndex: 0,
-    cards: chunks.map((chunk, i) => ({
-      id: `${now}-${i}`,
+  const lines = clean.split("\n").map((l) => l.trim()).filter(Boolean);
+  const cards: Card[] = [];
+
+  // 1. Check for delimiter-separated lines (Tab \t, double colon ::, pipe |, semicolon ;)
+  const delimiterPattern = /\t|::|;|\|/;
+  const matchingLines = lines.filter((l) => delimiterPattern.test(l));
+
+  if (matchingLines.length >= Math.max(1, Math.floor(lines.length * 0.3))) {
+    lines.forEach((line, idx) => {
+      let parts: string[] = [];
+      if (line.includes("\t")) parts = line.split("\t");
+      else if (line.includes("::")) parts = line.split("::");
+      else if (line.includes("|")) parts = line.split("|");
+      else if (line.includes(";")) parts = line.split(";");
+      else parts = [line];
+
+      const front = cleanNaturalText(parts[0] || "");
+      const back = parts.slice(1).join(" — ").trim();
+
+      if (front) {
+        cards.push({
+          id: `${now}-card-${idx}`,
+          text: front,
+          note: back ? cleanNaturalText(back) : undefined,
+          due: now,
+          interval: 0,
+          ease: 2.5,
+          reps: 0,
+          cardType: detectCardType(front, back),
+        });
+      }
+    });
+
+    if (cards.length > 0) {
+      return { cards, autoTitle: cards[0].text.slice(0, 40) };
+    }
+  }
+
+  // 2. Check Q: and A: pattern
+  const qList: { q: string; a?: string }[] = [];
+  let currentQ: string | null = null;
+  let currentA: string[] = [];
+
+  lines.forEach((line) => {
+    const isQ = /^(?:Q|Question|\d+[\.\)]\s*Q|س|\d+[\.\)]\s*س)[:：\-\.]/i.test(line);
+    const isA = /^(?:A|Answer|Ans|ج|\d+[\.\)]\s*ج)[:：\-\.]/i.test(line);
+
+    if (isQ) {
+      if (currentQ) {
+        qList.push({ q: currentQ, a: currentA.join(" ") });
+      }
+      currentQ = line.replace(/^(?:Q|Question|\d+[\.\)]\s*Q|س|\d+[\.\)]\s*س)[:：\-\.]\s*/i, "");
+      currentA = [];
+    } else if (isA) {
+      const aText = line.replace(/^(?:A|Answer|Ans|ج|\d+[\.\)]\s*ج)[:：\-\.]\s*/i, "");
+      currentA.push(aText);
+    } else if (currentQ && currentA.length > 0) {
+      currentA.push(line);
+    } else if (currentQ) {
+      currentQ += " " + line;
+    }
+  });
+
+  if (currentQ) {
+    qList.push({ q: currentQ, a: currentA.join(" ") });
+  }
+
+  if (qList.length > 0) {
+    qList.forEach((item, idx) => {
+      const front = cleanNaturalText(item.q);
+      const back = item.a ? cleanNaturalText(item.a) : undefined;
+      if (front) {
+        cards.push({
+          id: `${now}-q-${idx}`,
+          text: front,
+          note: back,
+          due: now,
+          interval: 0,
+          ease: 2.5,
+          reps: 0,
+          cardType: "question",
+        });
+      }
+    });
+    if (cards.length > 0) {
+      return { cards, autoTitle: cards[0].text.slice(0, 40) };
+    }
+  }
+
+  // 3. Fallback: chunk by paragraph/sentences
+  const chunks = chunkText(clean, 30);
+  chunks.forEach((chunk, i) => {
+    cards.push({
+      id: `${now}-txt-${i}`,
       text: chunk,
       due: now,
       interval: 0,
       ease: 2.5,
       reps: 0,
       cardType: detectCardType(chunk),
-    })),
+    });
+  });
+
+  return {
+    cards,
+    autoTitle: cards[0]?.text.slice(0, 40) || "Imported Flashcards",
+  };
+}
+
+export function buildDeck(text: string, maxWords: number): Deck {
+  const { cards } = parseTextToCards(text);
+  const now = Date.now();
+  return {
+    sourceText: text,
+    maxWords,
+    lastStudiedIndex: 0,
+    cards:
+      cards.length > 0
+        ? cards
+        : [
+            {
+              id: `${now}-0`,
+              text: cleanNaturalText(text) || "New Card",
+              due: now,
+              interval: 0,
+              ease: 2.5,
+              reps: 0,
+              cardType: detectCardType(text),
+            },
+          ],
   };
 }
 
@@ -816,13 +1057,54 @@ export function formatDue(due: number): string {
 
 export function parseImportedJsonData(jsonString: string): SavedDeck[] {
   try {
-    const parsed = JSON.parse(jsonString);
-    const rawDecks = Array.isArray(parsed) ? parsed : parsed.decks || [parsed];
+    let cleanStr = jsonString.trim();
+    // Strip markdown fences ```json ... ```
+    cleanStr = cleanStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
-    return rawDecks.map((item: Record<string, unknown>) => {
-      const rawName = String(item.name || item.title || "Imported Deck");
-      const name = cleanNaturalText(rawName) || "Imported Deck";
-      // Auto-detect break deck tag from title if deckType wasn't explicitly set
+    if (!cleanStr) return [];
+
+    const parsed = JSON.parse(cleanStr);
+    let rawDecks: any[] = [];
+
+    if (Array.isArray(parsed)) {
+      // Check if it's an array of cards (e.g. [{ front: "...", back: "..." }])
+      const isCardList =
+        parsed.length > 0 &&
+        parsed.every(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            (item.text || item.front || item.term || item.question || item.q || item.prompt) &&
+            !item.cards &&
+            !item.deck,
+        );
+
+      if (isCardList) {
+        rawDecks = [{ name: "Imported Flashcards", cards: parsed }];
+      } else {
+        rawDecks = parsed;
+      }
+    } else if (parsed && typeof parsed === "object") {
+      if (Array.isArray(parsed.decks)) {
+        rawDecks = parsed.decks;
+      } else if (parsed.deck && typeof parsed.deck === "object") {
+        rawDecks = [parsed.deck];
+      } else if (
+        Array.isArray(parsed.cards) ||
+        Array.isArray(parsed.items) ||
+        Array.isArray(parsed.flashcards)
+      ) {
+        rawDecks = [parsed];
+      } else {
+        rawDecks = [parsed];
+      }
+    }
+
+    return rawDecks.map((item: Record<string, unknown>, idx: number) => {
+      const rawName = String(
+        item.name || item.title || item.deckName || `Imported Deck ${idx + 1}`,
+      );
+      const name = cleanNaturalText(rawName) || `Imported Deck ${idx + 1}`;
       const isBreakByTitle = /\[break\]|\(break\)|break deck|break notes/i.test(name);
       const rawDeck = (item.deck || item) as Record<string, unknown>;
       const deckType: "study" | "break" =
@@ -830,18 +1112,77 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
           ? "break"
           : "study";
 
+      const rawFolderId = item.folderId || rawDeck.folderId;
+      const folderId = rawFolderId ? String(rawFolderId) : undefined;
+
       const sourceText = cleanNaturalText(
         String(rawDeck.sourceText || item.rawText || item.sourceText || ""),
       );
-      const rawCards = Array.isArray(rawDeck.cards || item.cards)
-        ? ((rawDeck.cards || item.cards) as Card[])
+
+      const cardArray = Array.isArray(rawDeck.cards)
+        ? rawDeck.cards
+        : Array.isArray(item.cards)
+        ? item.cards
+        : Array.isArray(item.items)
+        ? item.items
+        : Array.isArray(item.flashcards)
+        ? item.flashcards
         : [];
-      const cards: Card[] = rawCards.map((c) => ({
-        ...c,
-        text: cleanNaturalText(c.text || ""),
-        note: c.note ? cleanNaturalText(c.note) : undefined,
-        cardType: c.cardType || detectCardType(c.text || "", c.note),
-      }));
+
+      const now = Date.now();
+      const cards: Card[] = (cardArray as any[]).map((c: any, cIdx: number) => {
+        if (typeof c === "string") {
+          const front = cleanNaturalText(c);
+          return {
+            id: `${now}-${cIdx}`,
+            text: front,
+            due: now,
+            interval: 0,
+            ease: 2.5,
+            reps: 0,
+            cardType: detectCardType(front),
+          };
+        }
+
+        const front = cleanNaturalText(
+          String(
+            c.text ||
+              c.front ||
+              c.term ||
+              c.question ||
+              c.q ||
+              c.prompt ||
+              c.word ||
+              c.title ||
+              "",
+          ),
+        );
+        const back = cleanNaturalText(
+          String(
+            c.note ||
+              c.back ||
+              c.definition ||
+              c.answer ||
+              c.a ||
+              c.response ||
+              c.translation ||
+              c.explanation ||
+              "",
+          ),
+        );
+
+        return {
+          id: String(c.id || `${now}-${cIdx}`),
+          text: front || back || "Untitled Card",
+          note: back || undefined,
+          due: Number(c.due) || now,
+          interval: Number(c.interval) || 0,
+          ease: Number(c.ease) || 2.5,
+          reps: Number(c.reps) || 0,
+          starred: Boolean(c.starred),
+          cardType: c.cardType || detectCardType(front, back),
+        };
+      });
 
       const deck: Deck = {
         sourceText,
@@ -849,6 +1190,7 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
         cards,
         name,
         deckType,
+        folderId,
         lastStudiedIndex: Number(rawDeck.lastStudiedIndex || 0),
       };
 
@@ -858,6 +1200,7 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
         ),
         name,
         deck,
+        folderId,
         updatedAt: Date.now(),
       };
     });
@@ -865,6 +1208,88 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
     console.error("Failed to parse imported deck JSON:", error);
     return [];
   }
+}
+
+export type DecksBundle = {
+  version: "1.0";
+  exportedAt: number;
+  folders?: Folder[];
+  decks: SavedDeck[];
+};
+
+export function exportAllDecksBundle(): DecksBundle {
+  const decks = readLocalDecks();
+  const folders = listFolders();
+  return {
+    version: "1.0",
+    exportedAt: Date.now(),
+    folders,
+    decks,
+  };
+}
+
+export async function copyAllDecksToClipboard(): Promise<{ success: boolean; count: number; text: string }> {
+  const bundle = exportAllDecksBundle();
+  const jsonText = JSON.stringify(bundle, null, 2);
+  let success = false;
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(jsonText);
+      success = true;
+    } catch {
+      success = false;
+    }
+  }
+  return {
+    success,
+    count: bundle.decks.length,
+    text: jsonText,
+  };
+}
+
+export async function importDecksBundle(
+  jsonString: string,
+): Promise<{ importedDecks: SavedDeck[]; importedFolders: Folder[] }> {
+  const importedDecks: SavedDeck[] = [];
+  const importedFolders: Folder[] = [];
+
+  try {
+    const parsed = JSON.parse(jsonString);
+
+    // Import folders if present in the bundle
+    if (parsed && Array.isArray(parsed.folders) && parsed.folders.length > 0) {
+      const existingFolders = listFolders();
+      for (const f of parsed.folders) {
+        if (f && f.id && f.name) {
+          if (!existingFolders.some((ef) => ef.id === f.id)) {
+            const cleanF: Folder = {
+              id: String(f.id),
+              name: cleanNaturalText(String(f.name)),
+              color: f.color || "indigo",
+              createdAt: Number(f.createdAt || Date.now()),
+            };
+            existingFolders.push(cleanF);
+            importedFolders.push(cleanF);
+          }
+        }
+      }
+      saveFolders(existingFolders);
+    }
+
+    const rawDecks = parseImportedJsonData(jsonString);
+    for (const d of rawDecks) {
+      const saved = await upsertSavedDeck(d.deck, d.name, d.id);
+      const fid = d.folderId || d.deck.folderId;
+      if (fid) {
+        await moveDeckToFolder(saved.id, fid);
+      }
+      importedDecks.push(saved);
+    }
+  } catch (e) {
+    console.error("Failed to import decks bundle:", e);
+  }
+
+  return { importedDecks, importedFolders };
 }
 
 export type StudyProgress = {
