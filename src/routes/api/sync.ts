@@ -1,6 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import fs from "node:fs";
-import path from "node:path";
 
 interface SyncPayload {
   decks?: any[];
@@ -13,15 +11,16 @@ let serverDecks: any[] = [];
 let serverFolders: any[] = [];
 let isLoadedFromFile = false;
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const STORE_FILE = path.join(DATA_DIR, "sync_store.json");
-
-function ensureLoaded() {
-  if (isLoadedFromFile) return;
+async function ensureLoaded() {
+  if (isLoadedFromFile || typeof window !== "undefined") return;
   isLoadedFromFile = true;
   try {
-    if (fs.existsSync(STORE_FILE)) {
-      const raw = fs.readFileSync(STORE_FILE, "utf-8");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dataDir = path.join(process.cwd(), ".data");
+    const storeFile = path.join(dataDir, "sync_store.json");
+    if (fs.existsSync(storeFile)) {
+      const raw = fs.readFileSync(storeFile, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed.decks)) serverDecks = parsed.decks;
       if (Array.isArray(parsed.folders)) serverFolders = parsed.folders;
@@ -31,13 +30,18 @@ function ensureLoaded() {
   }
 }
 
-function persistToFile() {
+async function persistToFile() {
+  if (typeof window !== "undefined") return;
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dataDir = path.join(process.cwd(), ".data");
+    const storeFile = path.join(dataDir, "sync_store.json");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
     fs.writeFileSync(
-      STORE_FILE,
+      storeFile,
       JSON.stringify({ decks: serverDecks, folders: serverFolders, updatedAt: Date.now() }, null, 2),
       "utf-8"
     );
@@ -71,7 +75,7 @@ function dedupeFolders(list: any[]): any[] {
 }
 
 async function handleSync(request: Request): Promise<Response> {
-  ensureLoaded();
+  await ensureLoaded();
 
   let clientPayload: SyncPayload = {};
   if (request.method === "POST") {
@@ -93,7 +97,7 @@ async function handleSync(request: Request): Promise<Response> {
   }
 
   if (clientDecks.length > 0 || clientFolders.length > 0) {
-    persistToFile();
+    await persistToFile();
   }
 
   return new Response(
