@@ -127,12 +127,30 @@ function readLocalDecks(): SavedDeck[] {
   return memoryDecks || [HISTORICAL_MIRROR_DECK];
 }
 
+function triggerBackgroundServerSync() {
+  if (typeof window === "undefined") return;
+  try {
+    const decks = readLocalDecks();
+    const folders = listFolders();
+    fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decks, folders, timestamp: Date.now() }),
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
 function writeLocalDecks(decks: SavedDeck[]) {
   if (typeof window === "undefined") return;
   memoryDecks = decks;
 
   // Persist full decks reliably into IndexedDB (no 5MB quota cap)
   void saveIdbDecks(decks);
+
+  // Trigger cross-device sync with backend
+  triggerBackgroundServerSync();
 
   // Safely persist to localStorage for instant synchronous warm boot:
   try {
@@ -275,6 +293,40 @@ export async function syncDecks(): Promise<SyncResult> {
     }
   }
 
+  let serverDownloaded = 0;
+
+  // Perform cross-device server sync via /api/sync
+  try {
+    const localFolders = listFolders();
+    const serverRes = await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decks: localDecks, folders: localFolders, timestamp: Date.now() }),
+    });
+
+    if (serverRes.ok) {
+      const data = await serverRes.json();
+      if (data && Array.isArray(data.decks) && data.decks.length > 0) {
+        const prevLen = localDecks.length;
+        localDecks = dedupe([...localDecks, ...data.decks]);
+        if (localDecks.length > prevLen) {
+          serverDownloaded += localDecks.length - prevLen;
+        }
+        writeLocalDecks(localDecks);
+      }
+      if (data && Array.isArray(data.folders) && data.folders.length > 0) {
+        const existingFolders = listFolders();
+        const fMap = new Map<string, Folder>();
+        for (const f of [...existingFolders, ...data.folders]) {
+          if (f && f.id) fMap.set(f.id, f);
+        }
+        saveFolders(Array.from(fMap.values()));
+      }
+    }
+  } catch (err) {
+    console.warn("Backend /api/sync warning:", err);
+  }
+
   if (!isSupabaseConfigured) {
     const deduped = dedupe(localDecks);
     writeLocalDecks(deduped);
@@ -282,8 +334,8 @@ export async function syncDecks(): Promise<SyncResult> {
       success: true,
       totalDecks: deduped.length,
       uploadedCount: 0,
-      downloadedCount: 0,
-      isCloud: false,
+      downloadedCount: serverDownloaded,
+      isCloud: true,
       timestamp: Date.now(),
     };
   }
