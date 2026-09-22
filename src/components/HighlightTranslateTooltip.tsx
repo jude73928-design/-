@@ -10,18 +10,16 @@ import {
   ChevronLeft,
   ChevronRight,
   PenTool,
-  StickyNote,
-  Pause,
-  RotateCcw,
   Sparkles,
 } from "lucide-react";
 import { translatePhrase, type TranslationResult } from "@/services/translator";
-import { cleanNaturalText } from "@/lib/flashcards";
+import { cleanNaturalText, CardType, NEXT_TYPE_CYCLE } from "@/lib/flashcards";
 import { detectLang as detectLanguage } from "@/lib/tts";
 import { cn } from "@/lib/utils";
-import { speak, speakRepeat, type TtsHandle } from "@/lib/tts";
+import { speak, type TtsHandle } from "@/lib/tts";
 import { WriteRepeatModal } from "./WriteRepeatModal";
 import { playMutedTick, playCorrect } from "@/lib/sounds";
+import { CardTypeDot } from "@/components/CardTypeDot";
 
 export function HighlightTranslateTooltip() {
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -31,13 +29,10 @@ export function HighlightTranslateTooltip() {
   const [copied, setCopied] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
   const [forcedTarget, setForcedTarget] = useState<"ar" | "en" | null>(null);
-  const [activeTab, setActiveTab] = useState<"repeat" | "translate">("repeat");
+  const [cardType, setCardType] = useState<CardType>("fact");
 
-  // Audio Playback & Repeat Loop State
+  // Audio Playback State
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [repeatIteration, setRepeatIteration] = useState<number | null>(null);
-  const [repeatCount, setRepeatCount] = useState<1 | 3 | 5>(3);
-  const [repeatTarget, setRepeatTarget] = useState<"original" | "translated">("original");
 
   // Token Context State for word range extension
   const [tokens, setTokens] = useState<string[]>([]);
@@ -50,7 +45,7 @@ export function HighlightTranslateTooltip() {
   // Refs for tracking
   const abortControllerRef = useRef<AbortController | null>(null);
   const audioHandleRef = useRef<TtsHandle | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
 
   const detectedLang = selectedText ? detectLanguage(selectedText) : "en";
   const defaultTarget = detectedLang === "ar" ? "en" : "ar";
@@ -73,12 +68,12 @@ export function HighlightTranslateTooltip() {
     setSavedNote(false);
     setForcedTarget(null);
     setIsPlayingAudio(false);
-    setRepeatIteration(null);
     setTokens([]);
     setStartIdx(0);
     setEndIdx(0);
 
     if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("fc-selection-range", { detail: null }));
       const win = window as unknown as {
         __fc_translation_active?: boolean;
         __fc_dismissed_until?: number;
@@ -87,6 +82,23 @@ export function HighlightTranslateTooltip() {
       win.__fc_dismissed_until = 0;
     }
   }, []);
+
+  // Sync active range selection with InteractiveCardText
+  useEffect(() => {
+    if (isOpen && tokens.length > 0 && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("fc-selection-range", {
+          detail: { startIdx, endIdx },
+        }),
+      );
+    } else if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("fc-selection-range", {
+          detail: null,
+        }),
+      );
+    }
+  }, [isOpen, tokens.length, startIdx, endIdx]);
 
   // Keyboard escape handler
   useEffect(() => {
@@ -132,64 +144,18 @@ export function HighlightTranslateTooltip() {
     }
   }, []);
 
-  // Repeat Audio loop
-  const handlePlayRepeatAudio = useCallback(
-    async (textToSpeak: string, lang: "ar" | "en", count: 1 | 3 | 5) => {
-      audioHandleRef.current?.stop();
-      setIsPlayingAudio(true);
-      setRepeatIteration(1);
-
-      try {
-        const handle = await speakRepeat(
-          textToSpeak,
-          lang,
-          count,
-          250,
-          (currentIteration) => {
-            setRepeatIteration(currentIteration);
-          },
-          () => {
-            setIsPlayingAudio(false);
-            setRepeatIteration(null);
-          },
-        );
-        audioHandleRef.current = handle;
-        await handle.ended;
-      } catch (e) {
-        console.error("Repeat audio playback error", e);
-      } finally {
-        setIsPlayingAudio(false);
-        setRepeatIteration(null);
-      }
-    },
-    [],
-  );
-
   const handleStopAudio = useCallback(() => {
     audioHandleRef.current?.stop();
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setIsPlayingAudio(false);
-    setRepeatIteration(null);
   }, []);
-
-  const handleTogglePlayRepeat = useCallback(
-    (textToSpeak: string, lang: "ar" | "en") => {
-      if (isPlayingAudio) {
-        handleStopAudio();
-      } else {
-        void handlePlayRepeatAudio(textToSpeak, lang, repeatCount);
-      }
-    },
-    [isPlayingAudio, handleStopAudio, handlePlayRepeatAudio, repeatCount],
-  );
 
   // Single Audio Playback
   const handlePlaySingleAudio = useCallback(async (textToSpeak: string, lang: "ar" | "en") => {
     audioHandleRef.current?.stop();
     setIsPlayingAudio(true);
-    setRepeatIteration(null);
     try {
       const handle = await speak(textToSpeak, lang, 180, () => {});
       audioHandleRef.current = handle;
@@ -201,22 +167,44 @@ export function HighlightTranslateTooltip() {
     }
   }, []);
 
-  // Add highlighted text directly into notes
-  const handleAddToNotes = () => {
+  // Auto Fact Check Note Addition & Card Classification Update
+  const handleAutoFactCheck = () => {
     if (!selectedText.trim()) return;
+    playCorrect();
+
+    const translationStr = translation?.text ? ` (${translation.text})` : "";
+    const factCheckNote = `${selectedText}${translationStr}`;
+
+    // 1. Dispatch event to update active card automatically
+    window.dispatchEvent(
+      new CustomEvent("fc-add-note-to-active-card", {
+        detail: {
+          noteText: factCheckNote,
+          cardType: cardType,
+        },
+      }),
+    );
+
+    // 2. Also save to free notes in localStorage
     try {
       const raw = localStorage.getItem("flashcards-freenotes-v1");
       const currentNotes = raw ? JSON.parse(raw) : [];
-      const noteContent = translation ? `${selectedText}\n${translation.text}` : selectedText;
-      const updatedNotes = [{ id: `n-${Date.now()}`, text: noteContent }, ...currentNotes];
+      const updatedNotes = [
+        { id: `n-${Date.now()}`, text: `[Fact Check] ${factCheckNote}` },
+        ...currentNotes,
+      ];
       localStorage.setItem("flashcards-freenotes-v1", JSON.stringify(updatedNotes));
       window.dispatchEvent(new CustomEvent("flashcards-notes-changed"));
-      playCorrect();
-      setSavedNote(true);
-      setTimeout(() => setSavedNote(false), 2000);
     } catch (e) {
       console.warn("Failed to add note", e);
     }
+
+    // 3. Cycle card type dot
+    const nextType = NEXT_TYPE_CYCLE[cardType] || "question";
+    setCardType(nextType);
+
+    setSavedNote(true);
+    setTimeout(() => setSavedNote(false), 2200);
   };
 
   // Word Selection & Extension Handlers
@@ -294,7 +282,6 @@ export function HighlightTranslateTooltip() {
       setCopied(false);
       setSavedNote(false);
       setIsPlayingAudio(false);
-      setRepeatIteration(null);
 
       if (typeof window !== "undefined") {
         const win = window as unknown as { __fc_translation_active?: boolean };
@@ -307,22 +294,34 @@ export function HighlightTranslateTooltip() {
     [runTranslation],
   );
 
-  // Single-Tap on Word and Custom Highlight Event Listener
+  // Single-Tap / Drag Highlight Event Listener
   useEffect(() => {
     const handleWordHighlightEvent = (e: Event) => {
       const custom = e as CustomEvent<{
         word: string;
         tokens?: string[];
         tokenIndex?: number;
+        startIdx?: number;
+        endIdx?: number;
         forceTarget?: "ar" | "en";
       }>;
 
       if (!custom.detail || !custom.detail.word) return;
 
-      const { word, tokens: wordTokens, tokenIndex = 0, forceTarget } = custom.detail;
+      const {
+        word,
+        tokens: wordTokens,
+        tokenIndex = 0,
+        startIdx: sIdx,
+        endIdx: eIdx,
+        forceTarget,
+      } = custom.detail;
       const sentenceTokens = wordTokens && wordTokens.length > 0 ? wordTokens : [word];
 
-      openDialog(word, sentenceTokens, tokenIndex, tokenIndex, forceTarget);
+      const finalStart = typeof sIdx === "number" ? sIdx : tokenIndex;
+      const finalEnd = typeof eIdx === "number" ? eIdx : tokenIndex;
+
+      openDialog(word, sentenceTokens, finalStart, finalEnd, forceTarget);
     };
 
     window.addEventListener("fc-highlight-word", handleWordHighlightEvent);
@@ -331,10 +330,30 @@ export function HighlightTranslateTooltip() {
     };
   }, [openDialog]);
 
-  // Handle standard mouse selection
+  // Broadcast active selection range to flashcard text for synchronized tick highlighting
   useEffect(() => {
-    const handleMouseUp = () => {
-      setTimeout(() => {
+    if (isOpen && tokens.length > 0) {
+      window.dispatchEvent(
+        new CustomEvent("fc-selection-range", {
+          detail: { startIdx, endIdx },
+        }),
+      );
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("fc-selection-range", {
+          detail: null,
+        }),
+      );
+    }
+  }, [isOpen, startIdx, endIdx, tokens.length]);
+
+  // Handle native OS mouse and touch selection (including Android selection handles)
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+
+    const handleSelectionEnd = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
         const selection = window.getSelection();
         if (!selection || selection.isCollapsed) return;
 
@@ -364,12 +383,18 @@ export function HighlightTranslateTooltip() {
 
         const allTokens = clean.split(/\s+/).filter(Boolean);
         openDialog(clean, allTokens, 0, allTokens.length - 1);
-      }, 10);
+      }, 120);
     };
 
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mouseup", handleSelectionEnd);
+    document.addEventListener("touchend", handleSelectionEnd);
+    document.addEventListener("selectionchange", handleSelectionEnd);
+
     return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("mouseup", handleSelectionEnd);
+      document.removeEventListener("touchend", handleSelectionEnd);
+      document.removeEventListener("selectionchange", handleSelectionEnd);
     };
   }, [openDialog]);
 
@@ -390,227 +415,40 @@ export function HighlightTranslateTooltip() {
     }
   };
 
-  const textToRepeat =
-    repeatTarget === "translated" && translation ? translation.text : selectedText;
-  const langToRepeat =
-    repeatTarget === "translated" && translation ? translation.targetLang : detectedLang;
-
   if (!isOpen || !selectedText) {
     return null;
   }
 
   return (
     <>
-      {/* Centered / Docked Modal Container with Outside-Click Backdrop */}
+      {/* Sleek Non-Blocking Floating Action Toolbar — Floating over flashcard without modal backdrop window */}
       <div
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-2.5 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150 select-none"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            clearSelectionState();
-          }
-        }}
-        role="presentation"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-1.25rem)] max-w-md pointer-events-auto shadow-2xl animate-in slide-in-from-bottom-5 duration-200 select-none"
+        role="toolbar"
+        aria-label="Selection Actions"
       >
         <div
-          ref={modalRef}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-[380px] rounded-2xl border border-border/80 bg-popover/98 text-popover-foreground shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 overflow-hidden flex flex-col max-h-[85vh]"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Choose words to repeat"
+          ref={barRef}
+          className="w-full rounded-2xl border border-primary/30 bg-card/95 text-card-foreground shadow-2xl backdrop-blur-2xl p-3 space-y-2.5"
         >
-          {/* Header Row: Title & Cancel Button */}
-          <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border/40 bg-card/60">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <RotateCcw className="size-3.5" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-xs font-bold text-foreground leading-tight truncate">
-                  Choose words to repeat
-                </h3>
-                <p className="text-[10px] text-muted-foreground truncate">
-                  Tap words to select what to repeat or practice
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                clearSelectionState();
-              }}
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors cursor-pointer active:scale-95"
-              title="Cancel & close"
-              aria-label="Cancel"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-
-          {/* Body Content */}
-          <div className="p-3 space-y-2.5 overflow-y-auto flex-1 text-xs">
-            {/* Word Selection Chips & Range Controls */}
-            {tokens.length > 0 && (
-              <div className="rounded-xl border border-border/50 bg-secondary/30 p-2 space-y-1.5">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="font-semibold text-muted-foreground">
-                    Words ({endIdx - startIdx + 1}/{tokens.length}):
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playMutedTick(1.0, 0.12);
-                        handleSelectWordOnly();
-                      }}
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[9px] font-bold transition-all cursor-pointer",
-                        startIdx === endIdx
-                          ? "bg-primary text-primary-foreground shadow-2xs"
-                          : "bg-secondary text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      1 Word
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playMutedTick(1.1, 0.12);
-                        handleSelectFullSentence();
-                      }}
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[9px] font-bold transition-all cursor-pointer",
-                        startIdx === 0 && endIdx === tokens.length - 1
-                          ? "bg-primary text-primary-foreground shadow-2xs"
-                          : "bg-secondary text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      All
-                    </button>
-                  </div>
+          {/* Top Info Bar: Highlighted Text Snippet + Live Translation + Close */}
+          <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/40">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="p-1 rounded-md bg-primary/15 text-primary shrink-0">
+                <Sparkles className="size-3.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div
+                  dir={isArabicDetected ? "rtl" : "ltr"}
+                  className={cn(
+                    "text-xs sm:text-sm font-bold text-foreground truncate",
+                    isArabicDetected && "font-serif",
+                  )}
+                >
+                  {selectedText}
                 </div>
-
-                {/* Tappable Words */}
-                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto py-0.5">
-                  {tokens.map((tok, idx) => {
-                    const isSel = idx >= startIdx && idx <= endIdx;
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          playMutedTick(1.0, 0.14);
-                          handleTokenClick(idx);
-                        }}
-                        className={cn(
-                          "px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer truncate max-w-[130px]",
-                          isSel
-                            ? "bg-primary text-primary-foreground font-bold shadow-2xs scale-[1.02]"
-                            : "bg-card border border-border/50 text-foreground hover:bg-secondary active:scale-95",
-                        )}
-                        title={`Select "${tok}"`}
-                      >
-                        {tok}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Range Expand Buttons */}
-                {tokens.length > 1 && (
-                  <div className="flex items-center justify-between pt-1 border-t border-border/30 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playMutedTick(0.95, 0.12);
-                        handleExtendLeft();
-                      }}
-                      disabled={startIdx <= 0}
-                      className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium bg-secondary hover:bg-secondary/80 text-foreground disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                    >
-                      <ChevronLeft className="size-2.5" />
-                      <span>+ Prev</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playMutedTick(1.05, 0.12);
-                        handleExtendRight();
-                      }}
-                      disabled={endIdx >= tokens.length - 1}
-                      className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium bg-secondary hover:bg-secondary/80 text-foreground disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                    >
-                      <span>Next +</span>
-                      <ChevronRight className="size-2.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Selected Phrase & Live Translation Box */}
-            <div className="rounded-xl border border-primary/25 bg-primary/5 p-2.5 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-bold text-primary flex items-center gap-1">
-                  <Sparkles className="size-3" />
-                  <span>Selected Text</span>
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playMutedTick(1.0, 0.15);
-                      handleSwapLanguage();
-                    }}
-                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-secondary hover:bg-secondary/80 text-foreground cursor-pointer"
-                    title="Swap translation direction"
-                  >
-                    <span>{detectedLang.toUpperCase()}</span>
-                    <ArrowLeftRight className="size-2 text-muted-foreground" />
-                    <span>{targetLang.toUpperCase()}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePlaySingleAudio(selectedText, detectedLang)}
-                    className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 cursor-pointer"
-                    title="Listen once"
-                  >
-                    <Volume2 className="size-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 cursor-pointer"
-                    title="Copy text"
-                  >
-                    {copied ? (
-                      <Check className="size-3 text-emerald-500" />
-                    ) : (
-                      <Copy className="size-3" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Selected Phrase String */}
-              <div
-                dir={isArabicDetected ? "rtl" : "ltr"}
-                className={cn(
-                  "text-base font-bold text-foreground leading-snug break-words",
-                  isArabicDetected && "font-serif text-lg",
-                )}
-              >
-                {selectedText}
-              </div>
-
-              {/* Translation preview */}
-              <div className="pt-1.5 border-t border-primary/10">
                 {isLoading ? (
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground py-0.5">
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                     <Loader2 className="size-3 animate-spin text-primary" />
                     <span>Translating...</span>
                   </div>
@@ -618,177 +456,169 @@ export function HighlightTranslateTooltip() {
                   <div
                     dir={targetLang === "ar" ? "rtl" : "ltr"}
                     className={cn(
-                      "text-xs font-semibold text-foreground/90 leading-normal break-words",
-                      targetLang === "ar" && "font-serif text-sm",
+                      "text-[11px] font-semibold text-primary truncate",
+                      targetLang === "ar" && "font-serif",
                     )}
                   >
                     {translation.text}
                   </div>
-                ) : (
-                  <div className="text-[10px] text-muted-foreground italic py-0.5">
-                    Translation unavailable
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
-            {/* Repeat Audio Section */}
-            <div className="rounded-xl border border-border/60 bg-card p-2.5 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-foreground flex items-center gap-1 text-[11px]">
-                  <RotateCcw className="size-3 text-primary" />
-                  <span>Audio Repeat</span>
-                </span>
-
-                {/* Repeat multiplier pills: 1x, 3x, 5x */}
-                <div className="flex items-center gap-0.5 bg-secondary/80 p-0.5 rounded-lg text-[10px] font-bold">
-                  {([1, 3, 5] as const).map((cnt) => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => {
-                        playMutedTick(1.0, 0.12);
-                        setRepeatCount(cnt);
-                        if (isPlayingAudio) {
-                          void handlePlayRepeatAudio(textToRepeat, langToRepeat, cnt);
-                        }
-                      }}
-                      className={cn(
-                        "px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
-                        repeatCount === cnt
-                          ? "bg-primary text-primary-foreground shadow-2xs"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {cnt}×
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Target toggle: Original vs Translation */}
-              {translation && (
-                <div className="flex items-center gap-1 text-[10px] font-medium">
-                  <span className="text-muted-foreground">Voice:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playMutedTick(1.0, 0.1);
-                      setRepeatTarget("original");
-                    }}
-                    className={cn(
-                      "px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors cursor-pointer",
-                      repeatTarget === "original"
-                        ? "bg-secondary text-foreground font-bold"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Original ({detectedLang.toUpperCase()})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playMutedTick(1.0, 0.1);
-                      setRepeatTarget("translated");
-                    }}
-                    className={cn(
-                      "px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors cursor-pointer",
-                      repeatTarget === "translated"
-                        ? "bg-secondary text-foreground font-bold"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Translation ({targetLang.toUpperCase()})
-                  </button>
-                </div>
-              )}
-
-              {/* Main Repeat Play Button */}
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
-                onClick={() => handleTogglePlayRepeat(textToRepeat, langToRepeat)}
-                className={cn(
-                  "w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 shadow-xs",
-                  isPlayingAudio
-                    ? "bg-amber-500 text-white hover:bg-amber-600 animate-pulse"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90",
-                )}
+                onClick={() => {
+                  playMutedTick(1.0, 0.15);
+                  handleSwapLanguage();
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-secondary hover:bg-secondary/80 text-foreground transition-all border border-border/40 active:scale-95 cursor-pointer"
+                title="Swap translation language"
               >
-                {isPlayingAudio ? (
-                  <>
-                    <Pause className="size-3.5" />
-                    <span>
-                      Repeating {repeatIteration || 1}/{repeatCount} (Tap to Stop)
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <RotateCcw className="size-3.5" />
-                    <span>
-                      Play {repeatCount}× Repeat ({langToRepeat.toUpperCase()})
-                    </span>
-                  </>
-                )}
+                <span>{detectedLang.toUpperCase()}</span>
+                <ArrowLeftRight className="size-2.5 text-muted-foreground" />
+                <span>{targetLang.toUpperCase()}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={clearSelectionState}
+                className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition-all cursor-pointer active:scale-90"
+                title="Deselect & close"
+              >
+                <X className="size-3.5" />
               </button>
             </div>
           </div>
 
-          {/* Footer Actions: Save to Notes, Write 3x, Cancel & Done */}
-          <div className="flex items-center justify-between px-3.5 py-2.5 border-t border-border/40 bg-card/60 gap-1.5">
-            <div className="flex items-center gap-1">
+          {/* Core Action Buttons: Translate, Write 3×, Fact Check Dot */}
+          <div className="grid grid-cols-3 gap-2">
+            {/* 🌐 Translate Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playMutedTick(1.0, 0.14);
+                handleSwapLanguage();
+              }}
+              className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all cursor-pointer active:scale-95 shadow-2xs"
+              title="Translate between English and Arabic"
+            >
+              <Languages className="size-3.5 text-primary" />
+              <span>Translate</span>
+            </button>
+
+            {/* ✍️ Write 3 Times Practice */}
+            <button
+              type="button"
+              onClick={() => {
+                playMutedTick(1.0, 0.14);
+                setIsWriteModalOpen(true);
+              }}
+              className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold bg-secondary hover:bg-secondary/80 text-foreground border border-border/50 transition-all cursor-pointer active:scale-95 shadow-2xs"
+              title="Practice writing this text 3 times"
+            >
+              <PenTool className="size-3.5 text-primary" />
+              <span>Write 3×</span>
+            </button>
+
+            {/* 🟢 Fact Check Dot Button (Auto-writes Note to Card!) */}
+            <button
+              type="button"
+              onClick={() => {
+                playMutedTick(1.0, 0.14);
+                handleAutoFactCheck();
+              }}
+              className={cn(
+                "flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer active:scale-95 shadow-2xs",
+                savedNote
+                  ? "bg-emerald-500 text-white border-emerald-600 font-extrabold"
+                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/30",
+              )}
+              title="Automatically add fact check note to card and cycle classification dot"
+            >
+              {savedNote ? (
+                <>
+                  <Check className="size-3.5 text-white animate-in zoom-in-75 duration-150" />
+                  <span>Saved!</span>
+                </>
+              ) : (
+                <>
+                  <CardTypeDot
+                    cardType={cardType}
+                    editable={false}
+                    showLabel={false}
+                    className="scale-95"
+                  />
+                  <span>Fact Check</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick Controls: Range Extension & Listen / Copy */}
+          <div className="flex items-center justify-between pt-1 border-t border-border/30 text-xs px-1">
+            {/* Word range refinement */}
+            {tokens.length > 1 ? (
+              <div className="flex items-center gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleExtendLeft}
+                  disabled={startIdx <= 0}
+                  className="px-1.5 py-0.5 rounded bg-secondary hover:bg-secondary/80 text-foreground disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95 border border-border/30 font-bold"
+                >
+                  <ChevronLeft className="size-3 text-primary inline" />
+                  <span>Prev</span>
+                </button>
+
+                <span className="text-[10px] text-muted-foreground font-semibold px-1">
+                  {endIdx - startIdx + 1}/{tokens.length} words
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleExtendRight}
+                  disabled={endIdx >= tokens.length - 1}
+                  className="px-1.5 py-0.5 rounded bg-secondary hover:bg-secondary/80 text-foreground disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95 border border-border/30 font-bold"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="size-3 text-primary inline" />
+                </button>
+              </div>
+            ) : (
+              <div className="text-[10px] text-muted-foreground italic font-medium">
+                Single word
+              </div>
+            )}
+
+            {/* Listen & Copy */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleAddToNotes}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all cursor-pointer active:scale-95"
-                title="Save to personal study notes"
+                onClick={() => handlePlaySingleAudio(selectedText, detectedLang)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                title="Listen to audio"
               >
-                {savedNote ? (
-                  <Check className="size-3 text-emerald-500" />
+                <Volume2 className="size-3 text-primary" />
+                <span>Listen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              >
+                {copied ? (
+                  <>
+                    <Check className="size-3 text-emerald-500" />
+                    <span className="text-emerald-500 font-bold">Copied!</span>
+                  </>
                 ) : (
-                  <StickyNote className="size-3" />
+                  <>
+                    <Copy className="size-3" />
+                    <span>Copy</span>
+                  </>
                 )}
-                <span>{savedNote ? "Saved" : "+ Note"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsWriteModalOpen(true)}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-all cursor-pointer active:scale-95"
-                title="Practice writing 3×"
-              >
-                <PenTool className="size-3" />
-                <span>Write 3×</span>
-              </button>
-            </div>
-
-            {/* Action Buttons: Cancel and Done */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  clearSelectionState();
-                }}
-                className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all cursor-pointer active:scale-95"
-                title="Cancel & close"
-              >
-                <X className="size-3" />
-                <span>Cancel</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  clearSelectionState();
-                }}
-                className="flex items-center gap-1 rounded-lg px-3 py-1 text-[11px] font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer shadow-2xs active:scale-95"
-                title="Finish & close"
-              >
-                <Check className="size-3" />
-                <span>Done</span>
               </button>
             </div>
           </div>

@@ -490,6 +490,26 @@ function Study() {
     setQueue((q) => q.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }, []);
 
+  useEffect(() => {
+    const handleNoteToActiveCard = (e: Event) => {
+      const custom = e as CustomEvent<{ noteText: string; cardType?: CardType }>;
+      if (!custom.detail?.noteText) return;
+
+      if (current) {
+        const existing = current.note ? current.note.trim() : "";
+        const added = custom.detail.noteText.trim();
+        const updatedNote = existing ? `${existing}\n• ${added}` : `• ${added}`;
+        updateCard(current.id, {
+          note: updatedNote,
+          cardType: custom.detail.cardType || current.cardType || "fact",
+        });
+      }
+    };
+
+    window.addEventListener("fc-add-note-to-active-card", handleNoteToActiveCard);
+    return () => window.removeEventListener("fc-add-note-to-active-card", handleNoteToActiveCard);
+  }, [current, updateCard]);
+
   const handleApplyDeckTranslation = (
     translatedText: string,
     mode: "replace" | "append" | "newDeck",
@@ -921,11 +941,11 @@ function Study() {
       {/* Main Flashcard Viewport Area — Zero scroll on mobile */}
       <div className="flex-1 flex flex-col justify-center px-3 py-2 sm:px-4 sm:py-3 max-w-2xl mx-auto w-full overflow-hidden">
         {current && (
-          <div className="relative flex-1 flex flex-col justify-between rounded-3xl border border-border/80 bg-card p-5 sm:p-7 shadow-xl shadow-primary/5 transition-all overflow-hidden max-h-[calc(100dvh-170px)] sm:max-h-[calc(100dvh-180px)]">
+          <div className="relative flex-1 flex flex-col justify-between rounded-3xl border border-border/80 bg-card p-4 sm:p-6 shadow-xl shadow-primary/5 transition-all overflow-hidden max-h-[calc(100dvh-150px)] sm:max-h-[calc(100dvh-170px)]">
             {/* Card Header: Type Dot (1-tap cycle) & 1-tap Translate / Star */}
-            <div className="flex items-center justify-between gap-2 pb-3 border-b border-border/30 shrink-0">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2.5 border-b border-border/30 shrink-0">
               {/* Minimal Dot: Tapping switches classification instantly and opens quick note modal */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <CardTypeDot
                   card={current}
                   onDotClick={() => {
@@ -949,21 +969,21 @@ function Study() {
                   title="Add or edit card note / question"
                 >
                   <StickyNote className="size-3 text-primary" />
-                  <span>{current.note ? "Edit Note" : "+ Note"}</span>
+                  <span>{current.note ? "Note" : "+ Note"}</span>
                 </button>
               </div>
 
               {/* Translation Toggle & Star Action */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 {/* 1-Click Card Translation */}
                 <button
                   type="button"
                   onClick={handleToggleCardTranslate}
                   disabled={isTranslatingCard}
                   className={cn(
-                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all active:scale-95 cursor-pointer",
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-all active:scale-95 cursor-pointer",
                     cardViewMode === "translated"
-                      ? "bg-primary text-primary-foreground shadow-xs"
+                      ? "bg-primary text-primary-foreground shadow-2xs"
                       : "bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground",
                   )}
                   title={
@@ -979,10 +999,10 @@ function Study() {
                   ) : (
                     <Languages className="size-3" />
                   )}
-                  <span>{cardViewMode === "translated" ? "Original" : "Translate"}</span>
+                  <span>{cardViewMode === "translated" ? "Orig" : "Translate"}</span>
                 </button>
 
-                {/* Choose Words to Repeat */}
+                {/* Choose Words to Select / Inspect */}
                 <button
                   type="button"
                   onClick={() => {
@@ -999,11 +1019,11 @@ function Study() {
                       }),
                     );
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-all active:scale-95 cursor-pointer"
-                  title="Choose which words to repeat 3×"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-all active:scale-95 cursor-pointer"
+                  title="Select words to translate, listen, or add to notes"
                 >
-                  <RotateCcw className="size-3 text-primary" />
-                  <span>Repeat Words</span>
+                  <Sparkles className="size-3 text-primary" />
+                  <span>Select Words</span>
                 </button>
 
                 {/* 3x Writing Practice */}
@@ -1013,7 +1033,7 @@ function Study() {
                     playClick();
                     setPracticeWord(cleanNaturalText(current.text));
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-secondary/80 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all active:scale-95 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-secondary/80 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all active:scale-95 cursor-pointer"
                   title="Practice writing this card 3 times (or press W)"
                 >
                   <Pencil className="size-3 text-primary" />
@@ -1028,20 +1048,20 @@ function Study() {
                     updateCard(current.id, { starred: !current.starred });
                   }}
                   className={cn(
-                    "p-1.5 rounded-full transition-all active:scale-90 cursor-pointer",
+                    "p-1 rounded-full transition-all active:scale-90 cursor-pointer",
                     current.starred
                       ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary",
                   )}
                   title={current.starred ? "Starred card" : "Star card"}
                 >
-                  <Star className={cn("size-4", current.starred && "fill-current")} />
+                  <Star className={cn("size-3.5", current.starred && "fill-current")} />
                 </button>
               </div>
             </div>
 
-            {/* Card Body Text & Recall State */}
-            <div className="flex-1 flex flex-col justify-center my-3 overflow-y-auto min-h-0 select-text">
+            {/* Card Body Text & Recall State — No inner scrollbar */}
+            <div className="flex-1 flex flex-col justify-center my-2 sm:my-3 overflow-hidden min-h-0 select-text">
               {recallMode && !revealed && playsCount >= 2 ? (
                 <div className="flex flex-col items-center justify-center text-center p-4 space-y-3">
                   <div className="text-xs text-muted-foreground font-medium">

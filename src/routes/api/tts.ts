@@ -4,18 +4,38 @@ import { createFileRoute } from "@tanstack/react-router";
 // and the resulting MP3 buffers are concatenated. Most players handle naively
 // concatenated MP3 frames just fine.
 async function fetchChunk(text: string, lang: string): Promise<ArrayBuffer> {
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
-    text,
-  )}&tl=${lang}&client=tw-ob&ttsspeed=1`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Referer: "https://translate.google.com/",
-    },
-  });
-  if (!res.ok) throw new Error(`tts chunk failed ${res.status}`);
-  return res.arrayBuffer();
+  const clean = text
+    .replace(/[#*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const urls = [
+    `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(clean)}&tl=${lang}&client=tw-ob&ttsspeed=1`,
+    `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(clean)}&tl=${lang}&client=gtx&ttsspeed=1`,
+    `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${lang}&q=${encodeURIComponent(clean)}`,
+  ];
+
+  let lastErr: Error | null = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Referer: "https://translate.google.com/",
+          Accept: "*/*",
+        },
+      });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > 0) return buf;
+      } else {
+        lastErr = new Error(`TTS HTTP status ${res.status} from ${url}`);
+      }
+    } catch (e) {
+      lastErr = e as Error;
+    }
+  }
+  throw lastErr || new Error("All TTS audio sources failed");
 }
 
 function splitForTts(text: string, maxLen = 180): string[] {

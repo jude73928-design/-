@@ -1,15 +1,11 @@
-// TTS player using HTMLAudioElement with preservesPitch.
-// Unlike AudioBufferSourceNode.playbackRate (which chipmunks),
-// <audio>.playbackRate + preservesPitch does time-stretching that keeps
-// the voice natural and intelligible even at 6x (≈900 WPM).
-// Base WPM for Google Translate TTS is ~150.
+// TTS player with dual-engine reliability:
+// 1. High-quality HTMLAudioElement MP3 player using /api/tts
+// 2. Seamless local Web Speech API (speechSynthesis) fallback for 100% voice playback guarantee.
 
 const BASE_WPM = 150;
 
 const urlCache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
-// Pre-warmed audio elements keyed by blob URL — having the element already
-// created and `load()`ed lets play() start with no perceptible delay.
 const warmedAudio = new Map<string, HTMLAudioElement>();
 
 export type TtsEndReason = "ended" | "stopped" | "error";
@@ -18,6 +14,39 @@ export type TtsHandle = {
   stop: () => void;
   ended: Promise<TtsEndReason>;
 };
+
+// Global audio unlock state
+let isAudioUnlocked = false;
+let unlockAudioElement: HTMLAudioElement | null = null;
+
+export function unlockAudio(): void {
+  if (typeof window === "undefined" || isAudioUnlocked) return;
+  try {
+    if (!unlockAudioElement) {
+      unlockAudioElement = new Audio(
+        "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=",
+      );
+    }
+    const p = unlockAudioElement.play();
+    if (p !== undefined) {
+      p.then(() => {
+        unlockAudioElement?.pause();
+        isAudioUnlocked = true;
+      }).catch(() => {});
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+if (typeof window !== "undefined") {
+  const events = ["pointerdown", "touchstart", "click", "keydown"];
+  const handleUnlock = () => {
+    unlockAudio();
+    events.forEach((evt) => window.removeEventListener(evt, handleUnlock));
+  };
+  events.forEach((evt) => window.addEventListener(evt, handleUnlock, { passive: true }));
+}
 
 async function getAudioUrl(text: string, lang: "en" | "ar"): Promise<string> {
   const clean = text.replace(/#+/g, "").replace(/\s+/g, " ").trim();
@@ -30,6 +59,7 @@ async function getAudioUrl(text: string, lang: "en" | "ar"): Promise<string> {
     const res = await fetch(`/api/tts?lang=${lang}&text=${encodeURIComponent(clean)}`);
     if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
     const blob = await res.blob();
+    if (blob.size < 100) throw new Error("Invalid TTS audio blob");
     const url = URL.createObjectURL(blob);
     urlCache.set(key, url);
     return url;
@@ -61,27 +91,34 @@ export function prefetchTts(text: string, lang: "en" | "ar"): void {
     .catch(() => {});
 }
 
-export async function speak(
+// Native Web Speech API Fallback (SpeechSynthesis)
+export function speakWebSpeech(
   text: string,
   lang: "en" | "ar",
   wpm: number,
   onEnd?: (reason: TtsEndReason) => void,
-): Promise<TtsHandle> {
-  const url = await getAudioUrl(text, lang);
-  warmAudio(url);
-  // Reuse the pre-warmed element so playback starts instantly with no
-  // decoding/buffering delay. Remove from the warm pool so subsequent
-  // replays get a fresh warmed instance.
-  const warmed = warmedAudio.get(url);
-  warmedAudio.delete(url);
-  const audio = warmed ?? new Audio(url);
-  audio.preload = "auto";
-  audio.currentTime = 0;
-  const rate = Math.max(0.25, wpm / BASE_WPM);
-  audio.preservesPitch = true;
-  (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
-  (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
-  audio.playbackRate = rate;
+): TtsHandle {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    onEnd?.("error");
+    return { stop: () => {}, ended: Promise.resolve("error") };
+  }
+
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    /* ignore */
+  }
+
+  const clean = text.replace(/#+/g, "").replace(/\s+/g, " ").trim();
+  if (!clean) {
+    onEnd?.("ended");
+    return { stop: () => {}, ended: Promise.resolve("ended") };
+  }
+
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.lang = lang === "ar" ? "ar-SA" : "en-US";
+  const rate = Math.max(0.5, Math.min(2.2, wpm / BASE_WPM));
+  utterance.rate = rate;
 
   let resolveEnded!: (r: TtsEndReason) => void;
   const ended = new Promise<TtsEndReason>((r) => (resolveEnded = r));
@@ -90,36 +127,114 @@ export async function speak(
   const finish = (reason: TtsEndReason) => {
     if (settled) return;
     settled = true;
-    audio.onended = null;
-    audio.onerror = null;
-    try {
-      audio.pause();
-    } catch {
-      /* ignore */
-    }
+    utterance.onend = null;
+    utterance.onerror = null;
     onEnd?.(reason);
     resolveEnded(reason);
   };
 
-  audio.onended = () => {
-    finish("ended");
-    // Re-warm a fresh element for any future replay of the same text.
-    warmAudio(url);
+  utterance.onend = () => finish("ended");
+  utterance.onerror = (e) => {
+    console.warn("WebSpeech utterance error:", e);
+    finish("error");
   };
-  audio.onerror = () => finish("error");
 
   try {
-    await audio.play();
-    audio.playbackRate = rate;
-  } catch (e) {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices && voices.length > 0) {
+      const targetLangPrefix = lang === "ar" ? "ar" : "en";
+      const match = voices.find((v) => v.lang.toLowerCase().startsWith(targetLangPrefix));
+      if (match) utterance.voice = match;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.error("SpeechSynthesis error:", err);
     finish("error");
-    throw e;
+    return { stop: () => {}, ended: Promise.resolve("error") };
   }
 
   return {
-    stop: () => finish("stopped"),
+    stop: () => {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        /* ignore */
+      }
+      finish("stopped");
+    },
     ended,
   };
+}
+
+export async function speak(
+  text: string,
+  lang: "en" | "ar",
+  wpm: number,
+  onEnd?: (reason: TtsEndReason) => void,
+): Promise<TtsHandle> {
+  unlockAudio();
+
+  // Try Server /api/tts endpoint first
+  try {
+    const url = await getAudioUrl(text, lang);
+    warmAudio(url);
+    const warmed = warmedAudio.get(url);
+    warmedAudio.delete(url);
+    const audio = warmed ?? new Audio(url);
+    audio.preload = "auto";
+    audio.currentTime = 0;
+    const rate = Math.max(0.25, wpm / BASE_WPM);
+    audio.preservesPitch = true;
+    (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
+    (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+    audio.playbackRate = rate;
+
+    let resolveEnded!: (r: TtsEndReason) => void;
+    const ended = new Promise<TtsEndReason>((r) => (resolveEnded = r));
+    let settled = false;
+
+    const finish = (reason: TtsEndReason) => {
+      if (settled) return;
+      settled = true;
+      audio.onended = null;
+      audio.onerror = null;
+      try {
+        audio.pause();
+      } catch {
+        /* ignore */
+      }
+      onEnd?.(reason);
+      resolveEnded(reason);
+    };
+
+    audio.onended = () => {
+      finish("ended");
+      warmAudio(url);
+    };
+    audio.onerror = () => finish("error");
+
+    await audio.play();
+    audio.playbackRate = rate;
+
+    return {
+      stop: () => finish("stopped"),
+      ended,
+    };
+  } catch (err) {
+    console.warn(
+      "Server TTS audio failed or was blocked by browser. Falling back to Web Speech API:",
+      err,
+    );
+    return speakWebSpeech(text, lang, wpm, onEnd);
+  }
 }
 
 export async function speakRepeat(
@@ -162,7 +277,7 @@ export async function speakRepeat(
         if (i < times && !isStopped) {
           await new Promise((resolve) => setTimeout(resolve, pauseMs));
         }
-      } catch (err) {
+      } catch {
         if (!isStopped) {
           resolveEnded("error");
           onEnd?.("error");

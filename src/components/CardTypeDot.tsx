@@ -4,7 +4,8 @@ import { Card, CardType, getCardType, NEXT_TYPE_CYCLE } from "@/lib/flashcards";
 import { playClick } from "@/lib/sounds";
 
 export interface CardTypeDotProps {
-  card: Card;
+  card?: Card | null;
+  cardType?: CardType;
   onTypeChange?: (newType: CardType) => void;
   onDotClick?: () => void;
   editable?: boolean;
@@ -67,13 +68,14 @@ const TYPE_CONFIG: Record<
 
 export const CardTypeDot: React.FC<CardTypeDotProps> = ({
   card,
+  cardType,
   onTypeChange,
   onDotClick,
   editable = true,
   className = "",
   showLabel = true,
 }) => {
-  const currentType = getCardType(card);
+  const currentType = cardType || (card ? getCardType(card) : "fact");
   const config = TYPE_CONFIG[currentType] || TYPE_CONFIG.fact;
   const Icon = config.icon;
 
