@@ -7,6 +7,21 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  vite: {
+    build: {
+      rollupOptions: {
+        onwarn(warning, warn) {
+          if (
+            warning.code === "MODULE_LEVEL_DIRECTIVE" ||
+            (warning.message && warning.message.includes('"use client"'))
+          ) {
+            return;
+          }
+          warn(warning);
+        },
+      },
+    },
+  },
   nitro: {
     preset: "node-server",
   },
