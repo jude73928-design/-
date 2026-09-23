@@ -53,7 +53,7 @@ export type SavedDeck = {
 
 import { supabase } from "@/integrations/supabase/client";
 import { getAllIdbDecks, saveIdbDecks, deleteIdbDeck } from "./idb";
-import { HISTORICAL_MIRROR_DECK } from "./seedDecks";
+import { HISTORICAL_MIRROR_DECK, SEED_DECKS } from "./seedDecks";
 
 const isSupabaseConfigured = Boolean(
   typeof window !== "undefined" &&
@@ -82,7 +82,7 @@ function safeSupabaseSync<T>(action: PromiseLike<T> | Promise<T>, errorMessage?:
 }
 
 function readLocalDecks(): SavedDeck[] {
-  if (typeof window === "undefined") return [HISTORICAL_MIRROR_DECK];
+  if (typeof window === "undefined") return SEED_DECKS;
   if (memoryDecks !== null) return memoryDecks;
 
   try {
@@ -97,15 +97,22 @@ function readLocalDecks(): SavedDeck[] {
     memoryDecks = [];
   }
 
-  // Ensure HISTORICAL_MIRROR_DECK is in the saved decks list
-  const hasHistorical = memoryDecks.some(
-    (d) =>
-      d.id === HISTORICAL_MIRROR_DECK.id ||
-      d.name === HISTORICAL_MIRROR_DECK.name ||
-      d.deck?.name === HISTORICAL_MIRROR_DECK.name,
+  // Ensure all SEED_DECKS exist in memoryDecks
+  let addedAny = false;
+  const existingIds = new Set(memoryDecks.map((d) => d.id));
+  const existingNames = new Set(
+    memoryDecks.map((d) => (d.name || d.deck?.name || "").trim().toLowerCase()),
   );
-  if (!hasHistorical) {
-    memoryDecks.unshift(HISTORICAL_MIRROR_DECK);
+
+  for (const preset of SEED_DECKS) {
+    const pName = (preset.name || preset.deck?.name || "").trim().toLowerCase();
+    if (!existingIds.has(preset.id) && (!pName || !existingNames.has(pName))) {
+      memoryDecks.push(preset);
+      addedAny = true;
+    }
+  }
+
+  if (addedAny) {
     writeLocalDecks(memoryDecks);
   }
 
@@ -118,13 +125,14 @@ function readLocalDecks(): SavedDeck[] {
           const current = memoryDecks || [];
           if (current.length === 0 || idbDecks.length > current.length) {
             memoryDecks = dedupe([...current, ...idbDecks]);
+            writeLocalDecks(memoryDecks);
           }
         }
       })
       .catch(() => {});
   }
 
-  return memoryDecks || [HISTORICAL_MIRROR_DECK];
+  return memoryDecks || SEED_DECKS;
 }
 
 function triggerBackgroundServerSync() {
@@ -623,7 +631,10 @@ export function deleteFolder(id: string): void {
   }
 }
 
-export async function moveDeckToFolder(deckId: string, folderId: string | null): Promise<SavedDeck | null> {
+export async function moveDeckToFolder(
+  deckId: string,
+  folderId: string | null,
+): Promise<SavedDeck | null> {
   const decks = readLocalDecks();
   const idx = decks.findIndex((d) => d.id === deckId);
   if (idx < 0) return null;
@@ -929,7 +940,10 @@ export function parseTextToCards(text: string): { cards: Card[]; autoTitle?: str
   if (!clean) return { cards: [] };
 
   const now = Date.now();
-  const lines = clean.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = clean
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   const cards: Card[] = [];
 
   // 1. Check for delimiter-separated lines (Tab \t, double colon ::, pipe |, semicolon ;)
@@ -1111,7 +1125,10 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
   try {
     let cleanStr = jsonString.trim();
     // Strip markdown fences ```json ... ```
-    cleanStr = cleanStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    cleanStr = cleanStr
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
 
     if (!cleanStr) return [];
 
@@ -1174,12 +1191,12 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
       const cardArray = Array.isArray(rawDeck.cards)
         ? rawDeck.cards
         : Array.isArray(item.cards)
-        ? item.cards
-        : Array.isArray(item.items)
-        ? item.items
-        : Array.isArray(item.flashcards)
-        ? item.flashcards
-        : [];
+          ? item.cards
+          : Array.isArray(item.items)
+            ? item.items
+            : Array.isArray(item.flashcards)
+              ? item.flashcards
+              : [];
 
       const now = Date.now();
       const cards: Card[] = (cardArray as any[]).map((c: any, cIdx: number) => {
@@ -1198,15 +1215,7 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
 
         const front = cleanNaturalText(
           String(
-            c.text ||
-              c.front ||
-              c.term ||
-              c.question ||
-              c.q ||
-              c.prompt ||
-              c.word ||
-              c.title ||
-              "",
+            c.text || c.front || c.term || c.question || c.q || c.prompt || c.word || c.title || "",
           ),
         );
         const back = cleanNaturalText(
@@ -1280,7 +1289,11 @@ export function exportAllDecksBundle(): DecksBundle {
   };
 }
 
-export async function copyAllDecksToClipboard(): Promise<{ success: boolean; count: number; text: string }> {
+export async function copyAllDecksToClipboard(): Promise<{
+  success: boolean;
+  count: number;
+  text: string;
+}> {
   const bundle = exportAllDecksBundle();
   const jsonText = JSON.stringify(bundle, null, 2);
   let success = false;

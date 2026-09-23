@@ -1,0 +1,122 @@
+{
+  "id": "d-1790092434017",
+  "name": "BEN",
+  "updatedAt": 1790092434017,
+  "deck": {
+    "name": "BEN",
+    "sourceText": "Ben Shapiro co-founded The Daily Wire, is an ardent defender of Israel and frequently lectures and debates on the Israeli-Palestinian conflict.",
+    "maxWords": 40,
+    "lastStudiedIndex": 0,
+    "deckType": "study",
+    "cards": [
+      {
+        "id": "1790092434004-0",
+        "text": "Ben Shapiro, a prominent American conservative political commentator and co-founder of [The Daily Wire](https://en.wikipedia.org/wiki/The_Daily_Wire), is an ardent defender of Israel and frequently lectures and debates on the Israeli-Palestinian conflict.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-1",
+        "text": "His arguments generally align with a right-wing, pro-Israel Zionist perspective, which he frequently presents at university campus events and international panels. [1, 2, 3, 4]",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-2",
+        "text": "The core arguments Shapiro frequently advances regarding Palestine, Israel, and Hamas are grouped by theme: 1. The Right to Self-Defense and the Elimination of Hamas",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-3",
+        "text": "* Justification of Disproportionate Force: Shapiro argues that Israel is not bound to a proportionate response when dealing with terrorism. He advocates for dismantling Hamas completely.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-5",
+        "text": "* Human Shields and the Geneva Conventions: He contends that Hamas utilizes human shields and places military infrastructure under hospitals, schools, and homes, putting moral blame for civilian casualties on Hamas.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-7",
+        "text": "* Moral Asymmetry: Shapiro asserts that there is a vast moral distinction between Israel's unintended civilian casualties during operations and Hamas's deliberate targeting, murder, and kidnapping of civilians.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-8",
+        "text": "* The Palestinian Authority (PA): Shapiro opposes the idea of the PA managing the Gaza Strip post-conflict, pointing to its Martyrs Fund pay-for-slay system as incentivizing terrorism.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-10",
+        "text": "* Rejection of a Two-State Solution: He argues that a sovereign Palestinian state is unviable, pointing to Israel's 2005 unilateral withdrawal from Gaza as proof that concessions result in rise of rocket attacks.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-13",
+        "text": "* Ancient Jewish Presence: Shapiro grounds his Zionist arguments in biblical and archaeological timelines, arguing Jewish people maintained continuous connection to the land dating back thousands of years.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-15",
+        "text": "* Lack of Historical Sovereign Palestinian State: He regularly asserts that Palestine was never an independent, sovereign Arab state historically, but rather a geographic name applied by the Roman Empire.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-17",
+        "text": "* Critique of the UN and UNRWA: Shapiro claims that the United Nations and the UN Relief and Works Agency (UNRWA) act as a diplomatic cover and harbor for Hamas operatives, being deeply compromised.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092434004-18",
+        "text": "* Condemnation of Campus Protests: Shapiro attributes Western student support for Palestine to Marxist critical theory, filtering the conflict through a simplistic oppressor-oppressed binary.",
+        "due": 1790092434004,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      }
+    ]
+  }
+}

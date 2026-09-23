@@ -1,0 +1,113 @@
+{
+  "id": "d-1790092488803",
+  "name": "doug",
+  "updatedAt": 1790092488803,
+  "deck": {
+    "name": "doug",
+    "sourceText": "Douglas Murray, an influential British author, journalist, and associate editor of The Spectator, is a prominent critic of mainstream Islam and its impact on Western civilization.",
+    "maxWords": 30,
+    "lastStudiedIndex": 0,
+    "deckType": "study",
+    "cards": [
+      {
+        "id": "1790092488796-0",
+        "text": "[Douglas Murray](https://www.google.com/search?q=douglas+murray&kgmid=/m/02w3kr6), an influential British author, journalist, and associate editor of The Spectator, is a prominent critic of mainstream Islam and its impact on Western civilization.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-1",
+        "text": "His arguments are most comprehensively articulated in his bestselling books, The Strange Death of Europe (2017) and The Madness of Crowds (2019).",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-2",
+        "text": "Murray’s core arguments regarding Islam generally focus on theology, European demographics, and freedom of speech: 1. Incompatibility with European Secular Values",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-3",
+        "text": "* * Fundamental Clash of Cultures: Murray argues that mainstream Islam contains political and social doctrines that fundamentally clash with Enlightenment-era Western values.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-4",
+        "text": "He emphasizes that concepts like absolute freedom of speech, gender equality, religious pluralism, and LGBTQ+ rights are heavily suppressed under traditional Islamic frameworks.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-5",
+        "text": "* The Erosion of Free Speech: He contends that Western society has practiced self-censorship out of fear of violent retribution from radical Islamists, pointing to events like Charlie Hebdo, Salman Rushdie fatwa, and Samuel Paty's murder.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-10",
+        "text": "* * \"The Strange Death of Europe\": Murray posits that mass immigration from Muslim-majority nations, combined with declining European birth rates, is rapidly and irreversibly altering the cultural fabric of Europe.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-12",
+        "text": "* Failure of Integration: Unlike previous waves of European migration, Murray claims that a significant portion of Muslim immigrants have no desire to assimilate into Western culture, resulting in parallel societies and parallel courts.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-14",
+        "text": "* * The \"Islamophobia\" Shield: Murray argues that the term \"Islamophobia\" was deliberately coined to conflate a legitimate critique of a religious ideology with racial bigotry to shut down necessary debates.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-16",
+        "text": "* Distinction of Reforming Elements: While Murray acknowledges that moderate and reformist Muslims exist, he argues they are vastly outnumbered, underfunded, and lacks protection in the West.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092488796-19",
+        "text": "* The \"Religion of Peace\" Critique: Murray rejects the narrative that terrorism has \"nothing to do with Islam.\" He argues that extremist groups like ISIS, Al-Qaeda, and Hamas draw direct justifications from literal interpretations of texts.",
+        "due": 1790092488796,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      }
+    ]
+  }
+}

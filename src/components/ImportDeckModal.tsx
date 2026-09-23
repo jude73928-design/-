@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Coffee, BookOpen, Upload, FileText, X, Clipboard, Layers, Check, Sparkles } from "lucide-react";
+import {
+  Coffee,
+  BookOpen,
+  Upload,
+  FileText,
+  X,
+  Clipboard,
+  Layers,
+  Check,
+  Sparkles,
+} from "lucide-react";
 import {
   SavedDeck,
   buildDeck,
@@ -35,13 +45,19 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({
   );
   const [jsonDecks, setJsonDecks] = useState<SavedDeck[] | null>(null);
   const [detectedCardsCount, setDetectedCardsCount] = useState<number>(0);
-  const [firstCardPreview, setFirstCardPreview] = useState<{ text: string; note?: string } | null>(null);
+  const [firstCardPreview, setFirstCardPreview] = useState<{ text: string; note?: string } | null>(
+    null,
+  );
   const [pasteNotice, setPasteNotice] = useState<string | null>(null);
   const folders: Folder[] = listFolders();
 
   const processImportText = (text: string) => {
     setRawText(text);
-    const cleanStr = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    const cleanStr = text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
 
     if (!cleanStr) {
       setJsonDecks(null);
@@ -121,7 +137,9 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({
     try {
       const text = await navigator.clipboard.readText();
       if (!text || !text.trim()) {
-        setPasteNotice("Clipboard is empty or permissions blocked. Please press Ctrl+V directly into the text box.");
+        setPasteNotice(
+          "Clipboard is empty or permissions blocked. Please press Ctrl+V directly into the text box.",
+        );
         setTimeout(() => setPasteNotice(null), 4000);
         return;
       }
@@ -259,11 +277,13 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({
             {firstCardPreview && (
               <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2 text-[11px] text-slate-300 space-y-1">
                 <div className="font-semibold text-indigo-300">
-                  Card 1 Front: <span className="text-slate-100 font-normal">{firstCardPreview.text}</span>
+                  Card 1 Front:{" "}
+                  <span className="text-slate-100 font-normal">{firstCardPreview.text}</span>
                 </div>
                 {firstCardPreview.note && (
                   <div className="text-slate-400">
-                    Card 1 Back: <span className="text-slate-300 font-normal">{firstCardPreview.note}</span>
+                    Card 1 Back:{" "}
+                    <span className="text-slate-300 font-normal">{firstCardPreview.note}</span>
                   </div>
                 )}
               </div>
@@ -311,9 +331,7 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({
         {/* Deck Purpose / Type Selector */}
         {(!jsonDecks || jsonDecks.length <= 1) && (
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-              Deck Type
-            </label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5">Deck Type</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"

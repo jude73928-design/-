@@ -1,0 +1,140 @@
+{
+  "id": "d-1790092509769",
+  "name": "pat",
+  "updatedAt": 1790092509769,
+  "deck": {
+    "name": "pat",
+    "sourceText": "Patrick Bet-David approaches the topic of Islam from a unique perspective, shaped by fleeing the Iranian Islamic Revolution as a child.",
+    "maxWords": 30,
+    "lastStudiedIndex": 0,
+    "deckType": "study",
+    "cards": [
+      {
+        "id": "1790092509762-0",
+        "text": "[Patrick Bet-David (PBD)](https://www.google.com/search?q=patrick+bet-david+%28pbd%29&kgmid=/m/0w534hq), an Iranian-American author, businessman, and host of the highly popular [PBD Podcast](https://www.youtube.com/@valuetainment), approaches the topic of Islam from a unique perspective compared to traditional Western political commentators.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-1",
+        "text": "Born into an Armenian-Assyrian Christian family in Iran, his views are deeply shaped by his personal history of fleeing the Iranian Islamic Revolution as a child. [1, 2, 3]",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-2",
+        "text": "Unlike commentators who focus strictly on textual criticism, Bet-David filters his arguments through the lenses of geopolitics, personal history, economics, and free-speech absolutism.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-3",
+        "text": "His core arguments and perspectives regarding Islam can be categorized across several distinct themes: [4, 5] 1. Skepticism of Islam as a \"Religion of Peace\"",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-4",
+        "text": "* * The Iranian Precedent: Bet-David frequently draws from his upbringing in Iran to challenge the narrative that Islam is fundamentally a religion of peace.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-5",
+        "text": "He often points to real-world outcomes in Muslim-majority governments—such as public hangings, severe punishments for adultery, and strict religious enforcement in modern Iran—as proof of systemic violence under Islamic rule.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-7",
+        "text": "* Concerns Over Western Demographics: In debates regarding immigration, he has cited European examples and demographic trends to question whether unassimilated Muslim migration is compatible with Western stability.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-10",
+        "text": "* * Iran as the Root of Chaos: Bet-David distinguishes between everyday Muslims and the geopolitical regimes that weaponize the religion. He emphasizes that Middle East instability stems from the 1979 Revolution.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-11",
+        "text": "He argues that the rise of the Islamic Mullahs, IRGC, and proxies like Hamas/Hezbollah fractured what was once a relatively prosperous region under the Shah.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-14",
+        "text": "* Critique of Hardline Theology: He often argues that the hardline Shia political theology exported by Iran is corrupt and oppressive, contrasting it with more moderate versions of the faith.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-17",
+        "text": "* * A Platform for All Sides: As a media mogul, Bet-David frames himself as a free-speech absolutist. He hosted polarizing Muslim figures (like Andrew Tate post-conversion) to let audiences decide.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-19",
+        "text": "* The \"Bridge-Building\" Approach: While Bet-David is an outspoken Christian, he prefers an entrepreneurial, conversational approach over aggressive theological bashing.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-22",
+        "text": "* * Anti-Woke Alignment: Bet-David acknowledges that traditional Muslims share many core values with Western social conservatives regarding gender dynamics, family structure, and masculinity.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092509762-25",
+        "text": "* Praise for Faith Discipline: On his podcast, he has expressed admiration for the discipline, daily prayer routines, and strict moral boundaries (abstaining from alcohol/promiscuity) practiced by devout Muslims.",
+        "due": 1790092509762,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      }
+    ]
+  }
+}

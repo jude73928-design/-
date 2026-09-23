@@ -67,9 +67,7 @@ export const FolderModal: React.FC<FolderModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
-              Folder Name
-            </label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">Folder Name</label>
             <input
               type="text"
               autoFocus

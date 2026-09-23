@@ -2,7 +2,5 @@
   "name": "الاهلي ف كل حتة",
   "description": "Interactive multilingual flashcard study platform with tactile sound feedback, speech synthesis, and instant translation.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

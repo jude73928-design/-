@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 interface SyncPayload {
-  decks?: any[];
-  folders?: any[];
+  decks?: SyncItem[];
+  folders?: SyncItem[];
   timestamp?: number;
 }
 
+type SyncItem = Record<string, unknown> & { id?: string; updatedAt?: number; createdAt?: number };
+
 // In-memory master store
-let serverDecks: any[] = [];
-let serverFolders: any[] = [];
+let serverDecks: SyncItem[] = [];
+let serverFolders: SyncItem[] = [];
 let isLoadedFromFile = false;
 
 async function ensureLoaded() {
@@ -25,8 +27,32 @@ async function ensureLoaded() {
       if (Array.isArray(parsed.decks)) serverDecks = parsed.decks;
       if (Array.isArray(parsed.folders)) serverFolders = parsed.folders;
     }
+
+    // Automatically seed/load default decks from public/decks/
+    const publicDecksDir = path.join(process.cwd(), "public", "decks");
+    if (fs.existsSync(publicDecksDir)) {
+      const files = fs.readdirSync(publicDecksDir);
+      const jsonFiles = files.filter((f) => f.endsWith(".json"));
+      const seededDecks: SyncItem[] = [];
+      for (const file of jsonFiles) {
+        try {
+          const content = fs.readFileSync(path.join(publicDecksDir, file), "utf-8");
+          const parsedDeck = JSON.parse(content);
+          if (parsedDeck && parsedDeck.id) {
+            seededDecks.push(parsedDeck);
+          }
+        } catch (e) {
+          console.warn("[Server Sync] Error loading default deck file:", file, e);
+        }
+      }
+      if (seededDecks.length > 0) {
+        serverDecks = dedupeDecks([...seededDecks, ...serverDecks]);
+        // Also persist seeded decks back immediately
+        await persistToFile();
+      }
+    }
   } catch (err) {
-    console.warn("[Server Sync] Could not read sync_store.json:", err);
+    console.warn("[Server Sync] Could not read sync_store.json or public/decks:", err);
   }
 }
 
@@ -42,16 +68,20 @@ async function persistToFile() {
     }
     fs.writeFileSync(
       storeFile,
-      JSON.stringify({ decks: serverDecks, folders: serverFolders, updatedAt: Date.now() }, null, 2),
-      "utf-8"
+      JSON.stringify(
+        { decks: serverDecks, folders: serverFolders, updatedAt: Date.now() },
+        null,
+        2,
+      ),
+      "utf-8",
     );
   } catch (err) {
     console.warn("[Server Sync] Could not write sync_store.json:", err);
   }
 }
 
-function dedupeDecks(list: any[]): any[] {
-  const map = new Map<string, any>();
+function dedupeDecks(list: SyncItem[]): SyncItem[] {
+  const map = new Map<string, SyncItem>();
   for (const item of list) {
     if (!item || !item.id) continue;
     const existing = map.get(item.id);
@@ -62,8 +92,8 @@ function dedupeDecks(list: any[]): any[] {
   return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
-function dedupeFolders(list: any[]): any[] {
-  const map = new Map<string, any>();
+function dedupeFolders(list: SyncItem[]): SyncItem[] {
+  const map = new Map<string, SyncItem>();
   for (const item of list) {
     if (!item || !item.id) continue;
     const existing = map.get(item.id);
@@ -114,7 +144,7 @@ async function handleSync(request: Request): Promise<Response> {
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-cache, no-store, must-revalidate",
       },
-    }
+    },
   );
 }
 

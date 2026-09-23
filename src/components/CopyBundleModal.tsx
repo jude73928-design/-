@@ -61,7 +61,8 @@ export const CopyBundleModal: React.FC<CopyBundleModalProps> = ({
 
         <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/80 text-xs text-slate-300 flex items-center justify-between gap-2">
           <span>
-            📦 Contains <strong className="text-indigo-300">{deckCount} deck(s)</strong> and all folders. Ready to copy or save.
+            📦 Contains <strong className="text-indigo-300">{deckCount} deck(s)</strong> and all
+            folders. Ready to copy or save.
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
             <Button
@@ -107,7 +108,11 @@ export const CopyBundleModal: React.FC<CopyBundleModalProps> = ({
         </div>
 
         <div className="flex justify-end pt-2 border-t border-slate-800">
-          <Button size="sm" onClick={onClose} className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-4">
+          <Button
+            size="sm"
+            onClick={onClose}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-4"
+          >
             Close
           </Button>
         </div>

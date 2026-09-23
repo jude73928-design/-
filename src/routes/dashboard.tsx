@@ -90,7 +90,11 @@ function Dashboard() {
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [hasActiveDeck, setHasActiveDeck] = useState(false);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
-  const [bundleModal, setBundleModal] = useState<{ isOpen: boolean; jsonText: string; count: number }>({
+  const [bundleModal, setBundleModal] = useState<{
+    isOpen: boolean;
+    jsonText: string;
+    count: number;
+  }>({
     isOpen: false,
     jsonText: "",
     count: 0,
@@ -156,7 +160,11 @@ function Dashboard() {
   };
 
   const handleDeleteFolder = (folderId: string) => {
-    if (!window.confirm("Are you sure you want to delete this folder? The decks inside will become uncategorized.")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this folder? The decks inside will become uncategorized.",
+      )
+    ) {
       return;
     }
     playClick();
@@ -284,17 +292,16 @@ function Dashboard() {
   );
 
   // Filter decks by folder tab
-  const uncategorizedDecks = decks.filter(
-    (d) => !d.folderId && !d.deck?.folderId,
-  );
+  const uncategorizedDecks = decks.filter((d) => !d.folderId && !d.deck?.folderId);
 
-  const filteredDecks = selectedFolderId === null
-    ? decks
-    : selectedFolderId === "uncategorized"
-    ? uncategorizedDecks
-    : decks.filter(
-        (d) => d.folderId === selectedFolderId || d.deck?.folderId === selectedFolderId,
-      );
+  const filteredDecks =
+    selectedFolderId === null
+      ? decks
+      : selectedFolderId === "uncategorized"
+        ? uncategorizedDecks
+        : decks.filter(
+            (d) => d.folderId === selectedFolderId || d.deck?.folderId === selectedFolderId,
+          );
 
   const currentFolder = folders.find((f) => f.id === selectedFolderId);
 
@@ -437,8 +444,7 @@ function Dashboard() {
               }}
               className="h-7 text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/50 px-2.5 font-bold gap-1"
             >
-              <FolderPlus className="w-3.5 h-3.5" />
-              + New Folder
+              <FolderPlus className="w-3.5 h-3.5" />+ New Folder
             </Button>
           </div>
 
@@ -454,7 +460,9 @@ function Dashboard() {
             >
               <Layers className="w-3.5 h-3.5" />
               <span>All Decks</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${selectedFolderId === null ? "bg-white/20" : "bg-slate-700 text-slate-400"}`}>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] ${selectedFolderId === null ? "bg-white/20" : "bg-slate-700 text-slate-400"}`}
+              >
                 {decks.length}
               </span>
             </button>
@@ -479,7 +487,9 @@ function Dashboard() {
 
             {/* Folder Tabs */}
             {folders.map((f) => {
-              const fCount = decks.filter((d) => d.folderId === f.id || d.deck?.folderId === f.id).length;
+              const fCount = decks.filter(
+                (d) => d.folderId === f.id || d.deck?.folderId === f.id,
+              ).length;
               const isSelected = selectedFolderId === f.id;
               return (
                 <button
@@ -493,7 +503,9 @@ function Dashboard() {
                 >
                   <FolderIcon className="w-3.5 h-3.5 text-indigo-400" />
                   <span>{f.name}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${isSelected ? "bg-indigo-500/30 text-indigo-200" : "bg-slate-700 text-slate-400"}`}>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] ${isSelected ? "bg-indigo-500/30 text-indigo-200" : "bg-slate-700 text-slate-400"}`}
+                  >
                     {fCount}
                   </span>
                 </button>
@@ -864,4 +876,3 @@ function Dashboard() {
     </main>
   );
 }
-

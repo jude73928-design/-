@@ -1,0 +1,176 @@
+{
+  "id": "d-1790092573521",
+  "name": "bibi",
+  "updatedAt": 1790092573521,
+  "deck": {
+    "name": "bibi",
+    "sourceText": "Benjamin \"Bibi\" Netanyahu, the long-serving Prime Minister of Israel, anchors his geopolitical arguments in a worldview that frames Israel’s conflict with its neighbors not as a localized dispute over borders, but as a vanguard battle for Western civilization against radical Islamic extremism.",
+    "maxWords": 30,
+    "lastStudiedIndex": 0,
+    "deckType": "study",
+    "cards": [
+      {
+        "id": "1790092573517-0",
+        "text": "Benjamin \"Bibi\" Netanyahu, the long-serving Prime Minister of Israel, anchors his geopolitical arguments in a worldview that frames Israel’s conflict with its neighbors not as a localized dispute over borders,",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-1",
+        "text": "but as a vanguard battle for Western civilization against radical Islamic extremism.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-2",
+        "text": "His public rhetoric, diplomatic speeches (such as those before the United Nations General Assembly and the U.S. Congress), and written work layout a consistent set of arguments regarding the Israeli-Palestinian conflict and Islam: 1. The \"Clash of Civilizations\" and Radical Islam",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-4",
+        "text": "* Israel as the Western Shield: Netanyahu consistently argues that Israel stands on the front line of a global civilizational war.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-5",
+        "text": "He posits that radical Islamists seek the destruction of the West, and Israel is simply the first geographical barrier in their way.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-6",
+        "text": "He frequently tells Western audiences, \"Our fight is your fight.\"",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-7",
+        "text": "* The \"Axis of Terror\" Led by Iran: He draws a direct line between various Islamic militant groups, arguing they are all branches of the same radical ideological tree.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-8",
+        "text": "He frames Iran as the \"head of the snake,\" orchestrating and funding a network of Shia and Sunni proxies—including Hamas, Hezbollah, and the Houthis—to establish a global Islamic caliphate.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-9",
+        "text": "* The Theology of Death: Netanyahu draws a sharp moral contrast between Western/Israeli values and radical Islamic ideology.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-10",
+        "text": "He frequently states that while Western culture sanctifies life, radical Islamist groups \"sanctify death,\" utilizing suicide bombings, civilian human shields, and deliberate massacres as core components of their religious mission.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-11",
+        "text": "2. Distinction Between Mainstream Islam and \"Radical Islam\"",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-12",
+        "text": "* Strategic Diplomatic Nuance: Unlike some Western conservative commentators, Netanyahu explicitly avoids criticizing Islam as a whole. Strategically, he maintains that Israel's enemy is strictly Radical Islam (Islamism).",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-13",
+        "text": "* The Abraham Accords as Proof: He points to the Abraham Accords—the normalization agreements between Israel and moderate Arab/Muslim nations like the UAE, Bahrain, and Morocco—as definitive proof that Israel can coexist peacefully with mainstream Islam.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-14",
+        "text": "He argues that moderate Arab nations share Israel's fear of radical Islamic regimes (particularly Iran) and desire economic modernization over religious warfare. 3.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "question"
+      },
+      {
+        "id": "1790092573517-17",
+        "text": "* The Demilitarization Requirement: Netanyahu argues that any future settlement must grant Israel overriding security control over the entire territory west of the Jordan River. He asserts that a fully sovereign Palestinian state would immediately be co-opted by radical Islamic factions.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-19",
+        "text": "* The 2005 Gaza Precedent: He frequently uses Israel’s 2005 unilateral withdrawal from Gaza as his primary historical warning. He argues that when Israel removed its military and settlements, the vacuum was immediately filled by an Islamic terrorist organization (Hamas).",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-23",
+        "text": "* Hamas as ISIS: Following the October 7 attacks, Netanyahu launched a global diplomatic campaign to explicitly equate Hamas with ISIS. He argues that Hamas represents the purest, most barbaric form of militant Islamism, making any diplomatic negotiation or compromise impossible.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      },
+      {
+        "id": "1790092573517-26",
+        "text": "* The Palestinian Authority (PA) as Holocaust Deniers: Netanyahu argues that the supposedly moderate Palestinian Authority, led by Mahmoud Abbas, is fundamentally unviable as a partner for peace.",
+        "due": 1790092573517,
+        "interval": 0,
+        "ease": 2.5,
+        "reps": 0,
+        "cardType": "fact"
+      }
+    ]
+  }
+}
