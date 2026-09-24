@@ -642,12 +642,14 @@ function Study() {
 
   useEffect(() => () => stopSpeech(), [stopSpeech]);
 
-  // Preload TTS
+  // Eager prefetch TTS for zero-buffer transitions
   useEffect(() => {
     if (done) return;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const c = queue[index + i];
-      if (c) prefetchTts(c.text, detectLang(c.text));
+      if (c && c.text) {
+        prefetchTts(c.text, detectLang(c.text));
+      }
     }
   }, [queue, index, done]);
 

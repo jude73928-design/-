@@ -1,11 +1,9 @@
 export function detectLanguage(text: string): "ar" | "en" {
   if (!text || !text.trim()) return "en";
-  const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
-  const latinRegex = /[a-zA-Z]/g;
-  const arCount = (text.match(arabicRegex) || []).length;
-  const enCount = (text.match(latinRegex) || []).length;
-  if (arCount > 0 && (enCount === 0 || arCount >= enCount)) return "ar";
-  return enCount > arCount ? "en" : arCount > 0 ? "ar" : "en";
+  const arabicRe = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
+  const arabicCount = (text.match(arabicRe) || []).length;
+  const nonSpace = text.replace(/\s/g, "").length;
+  return nonSpace > 0 && arabicCount / nonSpace > 0.3 ? "ar" : "en";
 }
 
 export function chunkText(text: string, maxChunkSize: number = 1800): string[] {
