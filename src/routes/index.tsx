@@ -17,6 +17,7 @@ import { LayoutDashboard } from "lucide-react";
 import { PomodoroWidget } from "@/components/PomodoroWidget";
 import { TextTranslateQuickBar } from "@/components/TextTranslateQuickBar";
 import { playClick } from "@/lib/sounds";
+import { prefetchDeckQueue } from "@/lib/tts";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -87,6 +88,9 @@ function Home() {
     setActiveDeckId(saved.id);
     saveDeck(deck);
     setExisting(deck);
+    if (deck?.cards?.length) {
+      prefetchDeckQueue(deck.cards, 0);
+    }
     navigate({ to: "/study" });
   };
 
@@ -98,6 +102,9 @@ function Home() {
     setActiveDeckId(null);
     saveDeck(deck);
     setExisting(deck);
+    if (deck?.cards?.length) {
+      prefetchDeckQueue(deck.cards, 0);
+    }
     navigate({ to: "/study" });
   };
 

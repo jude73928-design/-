@@ -34,6 +34,8 @@ import {
   speak as ttsSpeak,
   detectLang,
   prefetchTts,
+  prefetchDeckQueue,
+  isTtsReady,
   type TtsHandle,
   type TtsEndReason,
 } from "@/lib/tts";
@@ -197,8 +199,11 @@ function Study() {
     }
   };
 
+  const currentlySpeakingCardIdRef = useRef<string | null>(null);
+
   const stopSpeech = useCallback(() => {
     playReqRef.current++;
+    currentlySpeakingCardIdRef.current = null;
     handleRef.current?.stop();
     handleRef.current = null;
     setIsPlaying(false);
@@ -218,9 +223,13 @@ function Study() {
       const reqId = ++playReqRef.current;
       handleRef.current?.stop();
       handleRef.current = null;
-      setIsLoading(true);
+
+      const lang = forceLang || detectLang(text);
+      // Only set loading if TTS audio is not already prewarmed/cached in memory
+      if (!isTtsReady(text, lang)) {
+        setIsLoading(true);
+      }
       try {
-        const lang = forceLang || detectLang(text);
         const handle = await ttsSpeak(text, lang, wpm, () => {
           if (playReqRef.current === reqId) setIsPlaying(false);
         });
@@ -386,7 +395,9 @@ function Study() {
       const newDeck = { ...deck, cards: newCards, lastStudiedIndex: nextIndex };
       setHistory((h) => [...h, { prevCard: current, deck }]);
       setDeck(newDeck);
-      saveDeck(newDeck);
+      queueMicrotask(() => {
+        saveDeck(newDeck);
+      });
       setQueue((q) => {
         const nextQueue = q.map((c) => (c.id === current.id ? updatedCurrent : c));
         if (nextIndex < nextQueue.length && !nextQueue[nextIndex].cardType) {
@@ -421,7 +432,9 @@ function Study() {
       const newDeck = { ...deck, cards: newCards, lastStudiedIndex: nextIndex };
       setHistory((h) => [...h, { prevCard: current, deck }]);
       setDeck(newDeck);
-      saveDeck(newDeck);
+      queueMicrotask(() => {
+        saveDeck(newDeck);
+      });
       setQueue((q) => {
         const nextQueue = q.map((c) => (c.id === current.id ? updatedCard : c));
         if (nextIndex < nextQueue.length && !nextQueue[nextIndex].cardType) {
@@ -572,11 +585,13 @@ function Study() {
         total: prog?.totalCards || cardQueue.length,
       });
       setIndex(0);
+      prefetchDeckQueue(cardQueue, stoppedIndex, wpm);
     } else {
       setIndex(0);
       setResumePrompt(null);
+      prefetchDeckQueue(cardQueue, 0, wpm);
     }
-  }, [navigate]);
+  }, [navigate, wpm]);
 
   // Auto-sync progress when index changes
   useEffect(() => {
@@ -642,16 +657,11 @@ function Study() {
 
   useEffect(() => () => stopSpeech(), [stopSpeech]);
 
-  // Eager prefetch TTS for zero-buffer transitions
+  // Continuous queue prefetching: pre-buffer upcoming cards
   useEffect(() => {
-    if (done) return;
-    for (let i = 0; i < 5; i++) {
-      const c = queue[index + i];
-      if (c && c.text) {
-        prefetchTts(c.text, detectLang(c.text));
-      }
-    }
-  }, [queue, index, done]);
+    if (done || queue.length === 0) return;
+    prefetchDeckQueue(queue, index, wpm);
+  }, [queue, index, done, wpm]);
 
   // Reset counters on card change
   useEffect(() => {
@@ -660,41 +670,91 @@ function Study() {
     setCardViewMode("original");
   }, [current?.id]);
 
-  // Autoplay
-  useEffect(() => {
-    if (!autoPlay || done || !current) return;
-    let cancelled = false;
-    (async () => {
-      setPlaysCount((c) => c + 1);
-      const reason = await speak(current.text);
-      if (cancelled || !autoPlay) return;
-      // Do not auto-advance if translation tooltip is active, or if user opened any modal/drawer
-      if (
-        (window as unknown as { __fc_translation_active?: boolean }).__fc_translation_active ||
-        isDeckTranslateOpen ||
-        practiceWord ||
-        questionNoteModalOpen ||
-        showNotesDrawer ||
-        showSettingsDrawer
-      ) {
-        return;
-      }
-      if (reason === "ended" && !recallMode) grade(3);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const isTransitionBlocked = useCallback(() => {
+    return Boolean(
+      (window as unknown as { __fc_translation_active?: boolean }).__fc_translation_active ||
+      isDeckTranslateOpen ||
+      practiceWord ||
+      questionNoteModalOpen ||
+      showNotesDrawer ||
+      showSettingsDrawer,
+    );
   }, [
-    autoPlay,
-    current?.id,
-    done,
     isDeckTranslateOpen,
     practiceWord,
     questionNoteModalOpen,
     showNotesDrawer,
     showSettingsDrawer,
-    recallMode,
+  ]);
+
+  const autoPlayRef = useRef(autoPlay);
+  autoPlayRef.current = autoPlay;
+  const recallModeRef = useRef(recallMode);
+  recallModeRef.current = recallMode;
+
+  const advanceAndPlayNext = useCallback(() => {
+    if (done) return;
+    const nextIdx = index + 1;
+    const nextCard = queue[nextIdx];
+
+    // 1. Advance card state visually
+    grade(3);
+
+    // 2. Start next audio immediately with 0ms transition gap
+    if (
+      nextCard &&
+      nextCard.text &&
+      autoPlayRef.current &&
+      !recallModeRef.current &&
+      !isTransitionBlocked()
+    ) {
+      currentlySpeakingCardIdRef.current = nextCard.id;
+      setPlaysCount(1);
+      void (async () => {
+        const reason = await speak(nextCard.text);
+        if (
+          reason === "ended" &&
+          autoPlayRef.current &&
+          !recallModeRef.current &&
+          !isTransitionBlocked()
+        ) {
+          advanceAndPlayNext();
+        }
+      })();
+    }
+  }, [done, index, queue, grade, isTransitionBlocked, speak]);
+
+  // Autoplay
+  useEffect(() => {
+    if (!autoPlay || done || !current) return;
+    // If this card is already playing (started immediately during transition), do not duplicate
+    if (currentlySpeakingCardIdRef.current === current.id && (isPlaying || isLoading)) {
+      return;
+    }
+    let cancelled = false;
+    currentlySpeakingCardIdRef.current = current.id;
+    (async () => {
+      setPlaysCount((c) => c + 1);
+      const reason = await speak(current.text);
+      if (cancelled || !autoPlayRef.current) return;
+      if (isTransitionBlocked()) return;
+      if (reason === "ended" && !recallModeRef.current) {
+        advanceAndPlayNext();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    autoPlay,
+    current?.id,
+    current?.text,
+    done,
+    isTransitionBlocked,
+    advanceAndPlayNext,
+    speak,
+    isPlaying,
+    isLoading,
   ]);
 
   const progress = total === 0 ? 0 : (Math.min(index, total) / total) * 100;

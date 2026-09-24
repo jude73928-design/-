@@ -55,6 +55,7 @@ import { CopyBundleModal } from "@/components/CopyBundleModal";
 import { CardTypeDot } from "@/components/CardTypeDot";
 import { FullTextTranslateModal } from "@/components/FullTextTranslateModal";
 import { playClick } from "@/lib/sounds";
+import { prefetchDeckQueue } from "@/lib/tts";
 
 function encodeDeck(d: SavedDeck): string {
   const payload = JSON.stringify({ name: d.name, deck: d.deck });
@@ -211,6 +212,9 @@ function Dashboard() {
     playClick();
     setActiveDeckId(d.id);
     saveDeck(d.deck);
+    if (d.deck?.cards?.length) {
+      prefetchDeckQueue(d.deck.cards, 0);
+    }
     navigate({ to: "/study" });
   };
 

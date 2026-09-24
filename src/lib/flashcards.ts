@@ -987,17 +987,17 @@ export function parseTextToCards(text: string): { cards: Card[]; autoTitle?: str
   let currentA: string[] = [];
 
   lines.forEach((line) => {
-    const isQ = /^(?:Q|Question|\d+[\.\)]\s*Q|س|\d+[\.\)]\s*س)[:：\-\.]/i.test(line);
-    const isA = /^(?:A|Answer|Ans|ج|\d+[\.\)]\s*ج)[:：\-\.]/i.test(line);
+    const isQ = /^(?:Q|Question|\d+[.)]\s*Q|س|\d+[.)]\s*س)[:：.-]/i.test(line);
+    const isA = /^(?:A|Answer|Ans|ج|\d+[.)]\s*ج)[:：.-]/i.test(line);
 
     if (isQ) {
       if (currentQ) {
         qList.push({ q: currentQ, a: currentA.join(" ") });
       }
-      currentQ = line.replace(/^(?:Q|Question|\d+[\.\)]\s*Q|س|\d+[\.\)]\s*س)[:：\-\.]\s*/i, "");
+      currentQ = line.replace(/^(?:Q|Question|\d+[.)]\s*Q|س|\d+[.)]\s*س)[:：.-]\s*/i, "");
       currentA = [];
     } else if (isA) {
-      const aText = line.replace(/^(?:A|Answer|Ans|ج|\d+[\.\)]\s*ج)[:：\-\.]\s*/i, "");
+      const aText = line.replace(/^(?:A|Answer|Ans|ج|\d+[.)]\s*ج)[:：.-]\s*/i, "");
       currentA.push(aText);
     } else if (currentQ && currentA.length > 0) {
       currentA.push(line);
@@ -1133,7 +1133,7 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
     if (!cleanStr) return [];
 
     const parsed = JSON.parse(cleanStr);
-    let rawDecks: any[] = [];
+    let rawDecks: Record<string, unknown>[] = [];
 
     if (Array.isArray(parsed)) {
       // Check if it's an array of cards (e.g. [{ front: "...", back: "..." }])
@@ -1199,9 +1199,9 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
               : [];
 
       const now = Date.now();
-      const cards: Card[] = (cardArray as any[]).map((c: any, cIdx: number) => {
-        if (typeof c === "string") {
-          const front = cleanNaturalText(c);
+      const cards: Card[] = (cardArray as unknown[]).map((rawC: unknown, cIdx: number) => {
+        if (typeof rawC === "string") {
+          const front = cleanNaturalText(rawC);
           return {
             id: `${now}-${cIdx}`,
             text: front,
@@ -1212,6 +1212,8 @@ export function parseImportedJsonData(jsonString: string): SavedDeck[] {
             cardType: detectCardType(front),
           };
         }
+
+        const c = (rawC && typeof rawC === "object" ? rawC : {}) as Record<string, unknown>;
 
         const front = cleanNaturalText(
           String(

@@ -11,6 +11,9 @@ export const BASE_WPM_AR = 120;
 const urlCache = new Map<string, string>();
 const inflightFetches = new Map<string, Promise<string>>();
 const prewarmedAudioElements = new Map<string, HTMLAudioElement>();
+const readyKeys = new Set<string>();
+
+const TTS_CACHE_NAME = "fc-tts-cache-v1";
 
 export type TtsEndReason = "ended" | "stopped" | "error";
 
@@ -19,7 +22,7 @@ export type TtsHandle = {
   ended: Promise<TtsEndReason>;
 };
 
-// Global audio unlock state
+// Global audio unlock state for mobile Safari/Chrome
 let isAudioUnlocked = false;
 let unlockAudioElement: HTMLAudioElement | null = null;
 
@@ -73,6 +76,20 @@ export function detectLang(text: string): "en" | "ar" {
   return nonSpace > 0 && arabicCount / nonSpace > 0.3 ? "ar" : "en";
 }
 
+/**
+ * Checks if the TTS audio for the given text is already loaded and ready in memory.
+ */
+export function isTtsReady(text: string, lang?: "en" | "ar"): boolean {
+  const cleaned = cleanText(text);
+  if (!cleaned) return true;
+  const targetLang = lang || detectLang(cleaned);
+  const key = `${targetLang}::${cleaned}`;
+  if (readyKeys.has(key)) return true;
+  const audio = prewarmedAudioElements.get(key);
+  if (audio && audio.readyState >= 2) return true;
+  return urlCache.has(key);
+}
+
 export async function getAudioUrl(text: string, lang: "en" | "ar"): Promise<string> {
   const cleaned = cleanText(text);
   if (!cleaned) throw new Error("Empty text for TTS");
@@ -85,10 +102,44 @@ export async function getAudioUrl(text: string, lang: "en" | "ar"): Promise<stri
   if (pending) return pending;
 
   const fetchPromise = (async () => {
-    const res = await fetch(`/api/tts?lang=${lang}&text=${encodeURIComponent(cleaned)}`);
+    const requestUrl = `/api/tts?lang=${lang}&text=${encodeURIComponent(cleaned)}`;
+
+    // Try browser Cache API first for 0ms offline/disk retrieval
+    if (typeof window !== "undefined" && "caches" in window) {
+      try {
+        const cache = await caches.open(TTS_CACHE_NAME);
+        const match = await cache.match(requestUrl);
+        if (match) {
+          const blob = await match.blob();
+          if (blob.size >= 50) {
+            const blobUrl = URL.createObjectURL(blob);
+            urlCache.set(key, blobUrl);
+            return blobUrl;
+          }
+        }
+      } catch {
+        /* fallback to network */
+      }
+    }
+
+    const res = await fetch(requestUrl);
     if (!res.ok) {
       throw new Error(`TTS HTTP error: ${res.status}`);
     }
+
+    // Cache the successful response in Cache API in background
+    if (typeof window !== "undefined" && "caches" in window) {
+      try {
+        const cacheCopy = res.clone();
+        void caches
+          .open(TTS_CACHE_NAME)
+          .then((cache) => cache.put(requestUrl, cacheCopy))
+          .catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    }
+
     const blob = await res.blob();
     if (blob.size < 50) {
       throw new Error("Invalid or empty TTS audio blob received");
@@ -106,18 +157,34 @@ export async function getAudioUrl(text: string, lang: "en" | "ar"): Promise<stri
   }
 }
 
-function prewarmElement(key: string, url: string): HTMLAudioElement {
+function prewarmElement(key: string, url: string, playbackRate = 1.0): HTMLAudioElement {
   let audio = prewarmedAudioElements.get(key);
   if (!audio) {
     audio = new Audio();
     audio.preload = "auto";
+    audio.preservesPitch = true;
+    (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
+    (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+    audio.playbackRate = playbackRate;
     audio.src = url;
+
+    const onCanPlay = () => {
+      readyKeys.add(key);
+      audio?.removeEventListener("canplay", onCanPlay);
+    };
+    audio.addEventListener("canplay", onCanPlay);
+
     try {
       audio.load();
     } catch {
       /* ignore */
     }
     prewarmedAudioElements.set(key, audio);
+  } else {
+    audio.preservesPitch = true;
+    (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
+    (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+    audio.playbackRate = playbackRate;
   }
   return audio;
 }
@@ -125,28 +192,84 @@ function prewarmElement(key: string, url: string): HTMLAudioElement {
 /**
  * Pre-fetches and pre-buffers audio for upcoming cards so transitions have 0ms buffer delay.
  */
-export function prefetchTts(text: string, lang?: "en" | "ar"): void {
-  if (typeof window === "undefined") return;
+export function prefetchTts(text: string, lang?: "en" | "ar", wpm = 180): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
   const cleaned = cleanText(text);
-  if (!cleaned) return;
+  if (!cleaned) return Promise.resolve();
   const targetLang = lang || detectLang(cleaned);
   const key = `${targetLang}::${cleaned}`;
 
-  void getAudioUrl(cleaned, targetLang)
+  const baseWpm = targetLang === "ar" ? BASE_WPM_AR : BASE_WPM_EN;
+  const playbackRate = Math.max(0.25, Math.min(16, wpm / baseWpm));
+
+  return getAudioUrl(cleaned, targetLang)
     .then((url) => {
-      prewarmElement(key, url);
+      prewarmElement(key, url, playbackRate);
     })
     .catch(() => {});
 }
 
 /**
- * Pre-fetches multiple queue items ahead of time
+ * Pre-fetches multiple queue items ahead of time with priority tiers
  */
-export function prefetchBatchTts(items: Array<{ text: string; lang?: "en" | "ar" }>): void {
+export function prefetchBatchTts(
+  items: Array<{ text: string; lang?: "en" | "ar" }>,
+  wpm = 180,
+): void {
   if (typeof window === "undefined" || !items.length) return;
   for (const item of items) {
-    prefetchTts(item.text, item.lang);
+    if (item.text) {
+      void prefetchTts(item.text, item.lang, wpm);
+    }
   }
+}
+
+/**
+ * High-performance full deck prefetcher.
+ * Downloads and prewarms the active cards immediately, and loads remaining cards in background idle chunks.
+ */
+export function prefetchDeckQueue(
+  cards: Array<{ text: string }>,
+  currentIndex = 0,
+  wpm = 180,
+): void {
+  if (typeof window === "undefined" || !cards || cards.length === 0) return;
+
+  // Immediate Tier: Current card and next 4 cards (top priority)
+  const immediate = cards.slice(currentIndex, currentIndex + 5);
+  for (const c of immediate) {
+    if (c?.text) void prefetchTts(c.text, undefined, wpm);
+  }
+
+  // Next Tier: Following 10 cards (after 100ms)
+  setTimeout(() => {
+    const nextTier = cards.slice(currentIndex + 5, currentIndex + 15);
+    for (const c of nextTier) {
+      if (c?.text) void prefetchTts(c.text, undefined, wpm);
+    }
+  }, 100);
+
+  // Background Tier: Remaining cards in chunks of 5 using idle scheduling
+  setTimeout(() => {
+    const remaining = cards.slice(currentIndex + 15, currentIndex + 60);
+    let chunkIndex = 0;
+    const processChunk = () => {
+      if (chunkIndex >= remaining.length) return;
+      const chunk = remaining.slice(chunkIndex, chunkIndex + 5);
+      chunkIndex += 5;
+      for (const c of chunk) {
+        if (c?.text) void prefetchTts(c.text, undefined, wpm);
+      }
+      if (chunkIndex < remaining.length) {
+        if ("requestIdleCallback" in window) {
+          window.requestIdleCallback(processChunk);
+        } else {
+          setTimeout(processChunk, 200);
+        }
+      }
+    };
+    processChunk();
+  }, 500);
 }
 
 // Native Web Speech API Fallback (Safety net)
@@ -259,20 +382,24 @@ export async function speak(
     const url = await getAudioUrl(cleaned, targetLang);
     let audio = prewarmedAudioElements.get(key);
 
-    if (audio) {
-      prewarmedAudioElements.delete(key);
-    } else {
-      audio = new Audio(url);
-      audio.preload = "auto";
+    if (!audio) {
+      audio = prewarmElement(key, url, playbackRate);
     }
 
-    audio.currentTime = 0;
-
-    // Standard & vendor pitch preservation for natural voice at 900+ WPM
+    // Set pitch preservation & rate BEFORE play to eliminate initial buffer hitch
     audio.preservesPitch = true;
     (audio as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
     (audio as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
     audio.playbackRate = playbackRate;
+
+    // Only reset currentTime if non-zero. Resetting currentTime when already 0 triggers browser re-seek buffering!
+    if (audio.currentTime !== 0) {
+      try {
+        audio.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    }
 
     let resolveEnded!: (r: TtsEndReason) => void;
     const ended = new Promise<TtsEndReason>((r) => (resolveEnded = r));
@@ -281,33 +408,32 @@ export async function speak(
     const finish = (reason: TtsEndReason) => {
       if (settled) return;
       settled = true;
-      audio.onended = null;
-      audio.onerror = null;
-      try {
-        audio.pause();
-      } catch {
-        /* ignore */
+      if (audio) {
+        audio.onended = null;
+        audio.onerror = null;
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch {
+          /* ignore */
+        }
       }
       onEnd?.(reason);
       resolveEnded(reason);
     };
 
-    audio.onended = () => {
-      finish("ended");
-      // Put a fresh prewarmed element back into the pool for instant replay/loops
-      prewarmElement(key, url);
-    };
+    audio.onended = () => finish("ended");
+    audio.onerror = () => finish("error");
 
-    audio.onerror = () => {
-      finish("error");
-    };
-
+    // Start playback immediately
     const playPromise = audio.play();
     if (playPromise !== undefined) {
-      await playPromise;
-      // Re-affirm playback rate & preservesPitch after playback starts
-      audio.preservesPitch = true;
-      audio.playbackRate = playbackRate;
+      playPromise.catch((err) => {
+        if (err.name !== "AbortError") {
+          console.warn("Audio play rejected:", err);
+          finish("error");
+        }
+      });
     }
 
     return {
@@ -325,7 +451,7 @@ export async function speakRepeat(
   lang?: "en" | "ar",
   wpm = 180,
   times = 3,
-  pauseMs = 300,
+  pauseMs = 200,
   onProgress?: (currentIteration: number, total: number) => void,
   onEnd?: (reason: TtsEndReason) => void,
 ): Promise<TtsHandle> {
@@ -357,7 +483,7 @@ export async function speakRepeat(
           }
           return;
         }
-        if (i < times && !isStopped) {
+        if (i < times && !isStopped && pauseMs > 0) {
           await new Promise((resolve) => setTimeout(resolve, pauseMs));
         }
       } catch {

@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// In-memory LRU-like cache for ultra-fast zero-latency TTS responses
+// In-memory high-capacity LRU-like cache for ultra-fast zero-latency TTS responses
 const serverTtsCache = new Map<string, Uint8Array>();
-const MAX_CACHE_ITEMS = 500;
+const MAX_CACHE_ITEMS = 5000;
 
 function cleanTextForTts(text: string): string {
   return text
@@ -66,6 +66,7 @@ async function fetchChunk(chunkText: string, lang: string): Promise<Uint8Array> 
           Referer: "https://translate.google.com/",
           Accept: "audio/mpeg, audio/*;q=0.9, */*;q=0.8",
         },
+        signal: AbortSignal.timeout(4000),
       });
       if (res.ok) {
         const buf = await res.arrayBuffer();
@@ -111,7 +112,7 @@ export const Route = createFileRoute("/api/tts")({
           return new Response(cachedFull, {
             headers: {
               "Content-Type": "audio/mpeg",
-              "Cache-Control": "public, max-age=86400, immutable",
+              "Cache-Control": "public, max-age=31536000, immutable",
             },
           });
         }
@@ -143,7 +144,7 @@ export const Route = createFileRoute("/api/tts")({
           return new Response(merged, {
             headers: {
               "Content-Type": "audio/mpeg",
-              "Cache-Control": "public, max-age=86400, immutable",
+              "Cache-Control": "public, max-age=31536000, immutable",
             },
           });
         } catch (e) {
