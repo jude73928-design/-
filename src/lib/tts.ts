@@ -26,6 +26,43 @@ export type TtsHandle = {
 let isAudioUnlocked = false;
 let unlockAudioElement: HTMLAudioElement | null = null;
 
+/**
+ * Instantly stop all active TTS playbacks across the application (prewarmed elements & Web Speech)
+ */
+export function stopAllAudio(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    prewarmedAudioElements.forEach((audio) => {
+      try {
+        if (!audio.paused) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent("fc-stop-audio"));
+    window.dispatchEvent(new CustomEvent("fc-stop-speech"));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function unlockAudio(): void {
   if (typeof window === "undefined" || isAudioUnlocked) return;
   try {
@@ -365,6 +402,7 @@ export async function speak(
   wpm = 180,
   onEnd?: (reason: TtsEndReason) => void,
 ): Promise<TtsHandle> {
+  stopAllAudio();
   unlockAudio();
 
   const cleaned = cleanText(text);

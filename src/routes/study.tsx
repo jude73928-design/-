@@ -32,6 +32,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   speak as ttsSpeak,
+  stopAllAudio,
   detectLang,
   prefetchTts,
   prefetchDeckQueue,
@@ -159,8 +160,16 @@ function Study() {
         setSoundThemeState(customEvent.detail);
       }
     };
+    const handleStopAudio = () => {
+      setIsPlaying(false);
+      handleRef.current?.stop();
+    };
     window.addEventListener("flashcards-sound-theme-changed", handleThemeChange);
-    return () => window.removeEventListener("flashcards-sound-theme-changed", handleThemeChange);
+    window.addEventListener("fc-stop-audio", handleStopAudio);
+    return () => {
+      window.removeEventListener("flashcards-sound-theme-changed", handleThemeChange);
+      window.removeEventListener("fc-stop-audio", handleStopAudio);
+    };
   }, []);
 
   // Card-only translation state
@@ -215,7 +224,11 @@ function Study() {
       stopSpeech();
     };
     window.addEventListener("fc-stop-speech", handleGlobalStop);
-    return () => window.removeEventListener("fc-stop-speech", handleGlobalStop);
+    window.addEventListener("fc-stop-audio", handleGlobalStop);
+    return () => {
+      window.removeEventListener("fc-stop-speech", handleGlobalStop);
+      window.removeEventListener("fc-stop-audio", handleGlobalStop);
+    };
   }, [stopSpeech]);
 
   const speak = useCallback(
@@ -1093,6 +1106,8 @@ function Study() {
                   type="button"
                   onClick={() => {
                     playClick();
+                    stopAllAudio();
+                    setIsPlaying(false);
                     setPracticeWord(cleanNaturalText(current.text));
                   }}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-secondary/80 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all active:scale-95 cursor-pointer"

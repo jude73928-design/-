@@ -14,9 +14,8 @@ import {
 } from "lucide-react";
 import { translatePhrase, type TranslationResult } from "@/services/translator";
 import { cleanNaturalText, CardType, NEXT_TYPE_CYCLE } from "@/lib/flashcards";
-import { detectLang as detectLanguage } from "@/lib/tts";
+import { detectLang as detectLanguage, stopAllAudio, speak, type TtsHandle } from "@/lib/tts";
 import { cn } from "@/lib/utils";
-import { speak, type TtsHandle } from "@/lib/tts";
 import { WriteRepeatModal } from "./WriteRepeatModal";
 import { playMutedTick, playCorrect } from "@/lib/sounds";
 import { CardTypeDot } from "@/components/CardTypeDot";
@@ -145,10 +144,8 @@ export function HighlightTranslateTooltip() {
   }, []);
 
   const handleStopAudio = useCallback(() => {
+    stopAllAudio();
     audioHandleRef.current?.stop();
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
     setIsPlayingAudio(false);
   }, []);
 
@@ -513,6 +510,7 @@ export function HighlightTranslateTooltip() {
               type="button"
               onClick={() => {
                 playMutedTick(1.0, 0.14);
+                stopAllAudio();
                 setIsWriteModalOpen(true);
               }}
               className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold bg-secondary hover:bg-secondary/80 text-foreground border border-border/50 transition-all cursor-pointer active:scale-95 shadow-2xs"
